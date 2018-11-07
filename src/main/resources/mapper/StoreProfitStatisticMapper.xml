@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.StoreProfitStatisticMapper">
+    <select id="getAdvertisementStatistic" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.StoreProfitStatisticViewModel" parameterType="String">
+         SELECT MIN(a.effective_start_time) startDate,COUNT(DISTINCT a.id) advertisementCount FROM advertisement a INNER JOIN
+         contract_store b ON a.contract_id = b.contract_id
+         WHERE a.effective_start_time IS NOT NULL AND b.store_id = #{value}
+    </select>
+
+    <select id="sumProfitAmount" resultType="Double" parameterType="String">
+        SELECT IFNULL(SUM(share_amount*100)/100,0) FROM store_profit_statistic WHERE store_id = #{value}
+    </select>
+
+    <select id="getProfitOverviewInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.ProfitOverview">
+        SELECT IFNULL(SUM(share_amount*100)/100, 0) AS totalShareAmount,
+                IFNULL(SUM(CASE WHEN settled = 1 THEN share_amount ELSE 0 END), 0) AS settledAmount
+          FROM period_store_profit_statistic
+    </select>
+
+    <select id="getProfitOverviewStatistic" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.ProfitSettledInfo"
+            parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.ProfitOverviewRequest">
+  select IFNULL(sum(temp.settledAmount*100)/100,0) settledAmount,IFNULL(sum(temp.unsettledAmount*100)/100,0) unsettledAmount,temp.year,temp.month from (
+        SELECT
+          case psps.settled when 1 then IFNULL(SUM(psps.share_amount*100)/100, 0) else  0  end  as settledAmount,
+          case psps.settled when 0 then IFNULL(SUM(psps.share_amount*100)/100, 0) else  0  end  as unsettledAmount,
+		  di.year,di.month
+		FROM
+		period_store_profit_statistic psps
+      INNER JOIN
+            date_info di  on  psps.settled_month = di.date and psps.settled_month &gt;= #{startDate} AND psps.settled_month &lt; #{endDate}
+      GROUP BY di.year,di.month,psps.settled
+      ) temp GROUP BY temp.year,temp.month ORDER BY temp.year,temp.month  asc
+    </select>
+    
+    <delete id="deleteStoreProfitStatistic">
+        DELETE FROM store_profit_statistic WHERE id in
+            <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        ;
+
+        DELETE FROM store_profit_statistic_extension WHERE id in
+            <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        ;
+
+        DELETE FROM advertisement_profit_statistic WHERE store_profit_statistic_id  in
+            <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        ;
+    </delete>
+
+    <select id="getAreaBySettledStoreProfitId"  resultType="com.sztouyun.advertisingsystem.model.system.Area" parameterType="string">
+        <include refid="getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.region_id "/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+
+    <sql id="getAreaIdListSubSQL">
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        FROM store_info si
+        INNER JOIN period_store_profit_statistic psps ON si.id = psps.`store_id`
+         AND psps.settled_store_profit_id = #{settledStoreProfitId}
+        INNER JOIN `area` n ON ${areaIdName} = n.id AND n.level = ${areaLevel}
+    </sql>
+
+
+    <select id="getAreasWithPeriodProfit"  resultType="com.sztouyun.advertisingsystem.model.system.Area" >
+        <include refid="getAreasWithPeriodProfitSubSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="getAreasWithPeriodProfitSubSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="getAreasWithPeriodProfitSubSQL">
+            <property name="areaIdName" value="si.region_id "/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+
+    <sql id="getAreasWithPeriodProfitSubSQL">
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        FROM store_info si
+        INNER JOIN period_store_profit_statistic psps ON si.id = psps.`store_id`  and psps.share_amount  &gt; 0
+        INNER JOIN `area` n ON ${areaIdName} = n.id AND n.level = ${areaLevel}
+    </sql>
+
+
+    <update id="supplementStoreProfitStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementaryProfitShareRequest">
+        update store_profit_statistic sps inner join (
+        select sps.id as storeProfitShareId, sum(aps.share_amount*100)/100 as storeProfitShareAmount, count(aps.id) as effectiveAdvertisementCount  from store_profit_statistic sps
+        inner join advertisement_profit_statistic aps on sps.id = aps.store_profit_statistic_id
+        and aps.is_qualified is true AND sps.profit_date = #{profitDate} AND sps.store_id in
+            <foreach collection="storeIds" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        group by sps.id
+        ) t_effective_data on t_effective_data.storeProfitShareId = sps.id
+        set sps.share_amount = t_effective_data.storeProfitShareAmount, sps.effective_advertisement_count = t_effective_data.effectiveAdvertisementCount
+    </update>
+
+    <update id="settleStoreProfitStatistic" parameterType="java.lang.String">
+        update store_profit_statistic sps
+        INNER JOIN period_store_profit_statistic psps on sps.period_store_profit_statistic_id=psps.id and psps.settled_store_profit_id=#{id} AND psps.share_amount &gt; 0
+        set sps.settled=1
+    </update>
+
+    <update id="settlePeriodStoreProfitStatistic" parameterType="java.lang.String">
+        update period_store_profit_statistic  set settled=1  where settled_store_profit_id=#{id} AND share_amount &gt; 0
+    </update>
+
+    <update id="cancelSettlePeriodStoreProfitStatistic" parameterType="java.lang.String">
+        update period_store_profit_statistic  set settled_store_profit_id=''  where settled_store_profit_id=#{id} AND share_amount &gt; 0
+    </update>
+    
+    <update id="updatePeriodStoreProfitId" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.PeriodStoreProfitShareCalculateViewModel">
+            UPDATE store_profit_statistic sps INNER JOIN `period_store_profit_statistic` psps ON psps.store_id = sps.store_id AND profit_date >= #{startDate} AND profit_date &lt; #{endDate}
+            AND psps.`settled_month` = #{startDate}
+            AND sps.settled IS FALSE
+            and sps.store_id in
+            <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+                #{item}
+            </foreach>
+            SET sps.period_store_profit_statistic_id = psps.id
+    </update>
+    
+    <update id="clearPeriodStoreProfitId">
+        update store_profit_statistic set period_store_profit_statistic_id = '' where period_store_profit_statistic_id in
+            <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+    </update>
+
+    
+    <update id="supplementStoreProfitQualifiedInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementProfitInfo">
+        UPDATE store_profit_statistic sps
+        INNER JOIN store_daily_statistic sds ON sds.store_id = sps.store_id
+        AND sds.`date` = sps.profit_date
+        and sps.opening_time_standard_is is true and sps.order_standard_is is false
+        <if test="comparisonType == 2">
+            and sds.order_count > #{standardOrderCount}
+        </if>
+        <if test="comparisonType == 4">
+            and sds.order_count &gt;= #{standardOrderCount}
+        </if>
+        and sps.profit_date &gt;= #{startDate} and sps.profit_date &lt;= #{endDate}
+        and sps.store_id in 
+        <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+            #{item}
+        </foreach>
+        set sps.order_standard_is = true, sps.is_qualified = true
+    </update>
+
+    <update id="supplementStoreProfitAmountInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementProfitInfo">
+        UPDATE store_profit_statistic sps
+            INNER JOIN (
+                SELECT
+                    aps.store_profit_statistic_id AS id,
+                    sum(aps.share_amount) share_amount,
+                    count(
+                        aps.store_profit_statistic_id
+                    ) effective_advertisement_count
+                FROM
+                    advertisement_profit_statistic aps
+                WHERE aps.updated_time = #{updatedTime}
+                and aps.store_id in
+                <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+                    #{item}
+                </foreach>
+                GROUP BY
+                    aps.store_profit_statistic_id
+            ) tmp ON sps.id = tmp.id
+            SET sps.share_amount = tmp.share_amount,
+                sps.effective_advertisement_count = sps.effective_advertisement_count + tmp.effective_advertisement_count
+    </update>
+
+    <update id="supplementStoreProfitExtensionOrderInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementProfitInfo">
+        UPDATE store_profit_statistic_extension spse
+        INNER JOIN store_profit_statistic sps ON sps.id = spse.id AND sps.profit_date &gt;= #{startDate} AND sps.profit_date &lt;= #{endDate}
+        INNER JOIN store_daily_statistic sds ON sds.store_id = sps.store_id AND sds.`date` = sps.profit_date
+        and sps.store_id in
+        <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+            #{item}
+        </foreach>
+        SET spse.order_num = sds.order_count
+    </update>
+
+
+    <update id="supplementStoreProfitOrderStandardIs" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementProfitInfo">
+        update store_profit_statistic sps inner join store_profit_statistic_extension spse on spse.id = sps.id and sps.profit_date &gt;= #{startDate} and sps.profit_date &lt;= #{endDate}
+        and sps.order_standard_is is false
+        and sps.store_id in
+        <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+            #{item}
+        </foreach>
+        <if test="comparisonType == 2">
+            and spse.order_num > #{standardOrderCount}
+        </if>
+        <if test="comparisonType == 4">
+            and spse.order_num &gt;= #{standardOrderCount}
+        </if>
+        set sps.order_standard_is = true
+    </update>
+
+
+    
+</mapper>

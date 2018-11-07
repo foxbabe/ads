@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.ContractAdvertisementPositionConfigMapper">
+    <select id="getAdvertisementPositionConfig" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementPositionConfig">
+        SELECT   amus.link_type,amus.step_type,capc.advertisement_position_type,capc.terminal_type from advertisement_material_url_step amus
+        INNER  JOIN advertisement_material am on amus.advertisement_material_id=am.id and amus.id=#{urlStepId}
+        INNER JOIN contract_advertisement_position_config capc on capc.id=am.position_id
+    </select>
+</mapper>

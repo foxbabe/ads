@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>透云广告</title>
+    <script src="http://g.tbcdn.cn/mtb/lib-flexible/0.3.4/??flexible_css.js,flexible.js"></script>
+    <link rel="stylesheet" href="/manager/other/mobile.css">
+</head>
+<body>
+    <div class="content">
+        <div class="opcityBg">
+                <div class="logo"></div>
+                <p>为流量主提供优质解决方案</p>
+                <div class="bottomContent">
+                <div class="inputGroup">
+                    <input type="text" placeholder="请输入手机号" id="phoneNumberInput">
+                </div>
+                <div class="btnGroup">
+                    <div class="btn" id="submitBtn">
+                        提 交
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+<!-- <script src="https://cdn.bootcss.com/jquery/1.7.2/jquery.min.js"></script> -->
+<script src="http://ads-test.storify.cc/tyad20180712/tyad.js"></script>
+<script>
+        var clientHeight=document.body.clientHeight;
+        var getCallUrl = $tyad.getUrlParam();
+        var baseUrl = JSON.stringify(getCallUrl)!=="{}"&&/(http|https):\/\/[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62}|(:[0-9]{1,4}))+\.?/ig.exec(getCallUrl.callUrl)[0];
+        var params = $tyad.getUrlParam(getCallUrl.callUrl);
+        var submitBtn = document.getElementById("submitBtn")
+        var phoneNumberInput = document.getElementById("phoneNumberInput")
+        var checkPhoneNumberInput = function(){
+            if(phoneNumberInput.value){
+                submitBtn.className =  "btn canSubmit"
+            }else{
+                submitBtn.className =  "btn"
+            }
+        }
+        $tyad.onload(checkPhoneNumberInput)
+        phoneNumberInput.oninput= checkPhoneNumberInput;
+        phoneNumberInput.onfocus= function(){
+            document.body.style.height = clientHeight+"px";
+        }
+        phoneNumberInput.onblur = function(){
+            document.body.style.height = "100%";
+
+        }
+        submitBtn.onclick=function(){
+            var phoneNumber=phoneNumberInput.value;
+            if(!phoneNumber){
+                return
+            }
+            if(phoneNumber&&/1[0-9]{10}/.test(phoneNumber)){
+                params.phone=phoneNumber;
+                $tyad.ajax({
+                    type:'POST',
+                    contentType:"application/json",
+                    url: baseUrl+"/ads/api/monitor/submit",
+                    data:JSON.stringify(params),
+                    success:function(result){
+                        result =JSON.parse(result);  
+                        if(result.code==-1){
+                            alert(result.message)
+                            return
+                        }
+                        if(result.code==200){
+                            window.location.href=unescape(result.message);
+                        }
+                    }
+                  })
+            }else{
+                alert("手机号格式不正确,请重新输入")
+            }
+        }
+</script>
+</html>

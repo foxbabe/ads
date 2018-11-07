@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.OrderMapper">
+    <insert id="saveOrderDetails" parameterType="java.util.List">
+        INSERT INTO order_detail(id, order_id,store_count)
+        VALUES
+        <foreach collection="list" index="index" item="item"  separator=",">
+            (#{item.id},#{item.orderId},#{item.storeCount})
+        </foreach>
+    </insert>
+
+    <insert id="saveOrderDetailDates" parameterType="java.util.List">
+        INSERT INTO order_detail_date(date, order_detail_id)
+        VALUES
+        <foreach collection="list" index="index" item="item"  separator=",">
+            (#{item.date,jdbcType=DATE},#{item.orderDetailId})
+        </foreach>
+    </insert>
+
+    <insert id="saveOrderDetailStores" parameterType="java.util.List">
+        INSERT INTO order_detail_store(store_id, order_detail_id)
+        VALUES
+        <foreach collection="list" index="index" item="item"  separator=",">
+            (#{item.storeId},#{item.orderDetailId})
+        </foreach>
+    </insert>
+
+    <select id="getOrderStoreList" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreOrderRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreOrderViewModel">
+        select
+            si.id AS storeId,
+            si.store_name AS storeName,
+            si.store_type AS storeType,
+            si.province_id AS provinceId,
+            si.city_id AS cityId,
+            si.store_address AS storeAddress,
+            si.available AS available,
+            si.region_id AS regionId,
+            si.device_id AS deviceId,
+            si.store_no AS shopId,
+            abs(si.deleted - 1) as canView
+        FROM store_info si
+        INNER JOIN
+            (SELECT ods.store_id from order_detail od
+            inner join order_detail_date odd on od.id=odd.order_detail_id
+                    AND od.order_id = #{orderId}
+                <if test="startTime != null">
+                    AND odd.date <![CDATA[ >= ]]> #{startTime}
+                </if>
+                <if test="endTime != null">
+                    AND odd.date <![CDATA[ <= ]]> #{endTime}
+                </if>
+            inner join order_detail_store ods on od.id=ods.order_detail_id
+            GROUP BY ods.store_id) temp
+            on temp.store_id=si.id
+                <if test="storeName != '' and storeName != null">
+                    AND si.store_Name like CONCAT('%', #{storeName}, '%')
+                </if>
+                <if test="available != null">
+                    AND si.available = #{available}
+                </if>
+                <if test="deviceId != '' and deviceId != null">
+                    AND si.device_id like CONCAT('%', #{deviceId}, '%')
+                </if>
+                <if test="shopId != '' and shopId != null">
+                    AND si.store_no like  CONCAT('%',#{shopId},'%')
+                </if>
+                <if test="storeSource != '' and storeSource != null">
+                    AND si.store_source = #{storeSource}
+                </if>
+        ORDER BY si.id
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getOrderStoreListCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreOrderRequest" resultType="long">
+        select
+          count(si.id)
+        FROM store_info si
+        INNER JOIN
+        (SELECT ods.store_id from order_detail od
+        inner join order_detail_date odd on od.id=odd.order_detail_id
+               AND od.order_id = #{orderId}
+            <if test="startTime != null">
+                AND odd.date <![CDATA[ >= ]]> #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND odd.date <![CDATA[ <= ]]> #{endTime}
+            </if>
+        inner join order_detail_store ods on od.id=ods.order_detail_id
+        GROUP BY ods.store_id) temp
+        on temp.store_id=si.id
+            <if test="storeName != '' and storeName != null">
+                AND si.store_Name like CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="available != null">
+                AND si.available = #{available}
+            </if>
+            <if test="deviceId != '' and deviceId != null">
+                AND si.device_id like CONCAT('%', #{deviceId}, '%')
+            </if>
+            <if test="shopId != '' and shopId != null">
+                AND si.store_no like  CONCAT('%',#{shopId},'%')
+            </if>
+            <if test="storeSource != '' and storeSource != null">
+                AND si.store_source = #{storeSource}
+            </if>
+    </select>
+
+    <select id="getDailyStoreCountStatistic" resultType="com.sztouyun.advertisingsystem.viewmodel.order.DailyStoreCountItem" parameterType="com.sztouyun.advertisingsystem.viewmodel.order.DailyDeliveryStoreStatisticRequest">
+        SELECT odd.date,count(DISTINCT ods.store_id ) as storeCount from order_detail odl
+INNER JOIN order_detail_date odd on odl.id=odd.order_detail_id and odl.order_id=#{id}
+INNER JOIN order_detail_store ods on odd.order_detail_id=ods.order_detail_id
+GROUP BY odd.date
+order by odd.date desc  LIMIT #{start}, #{pageSize};
+    </select>
+
+
+    <select id="getTotalStoreCountWithDate" parameterType="string" resultType="long">
+        SELECT SUM(storeCount) FROM (
+            SELECT COUNT(DISTINCT ods.store_id ) AS storeCount FROM order_detail odl
+            INNER JOIN order_detail_date odd ON odl.id=odd.order_detail_id AND odl.order_id= #{orderId}
+            INNER JOIN order_detail_store ods ON odd.order_detail_id=ods.order_detail_id
+            GROUP BY odd.date
+            ) tmp
+    </select>
+
+</mapper>

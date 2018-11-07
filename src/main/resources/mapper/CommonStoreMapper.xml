@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper  namespace="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper">
+    <sql id="isPaveGoodsConditionSQL">
+        <if test="paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == true
+            and paveGoodsConditionInfo.paveGoodsList.size() == 0">
+            AND EXISTS (select 1 from store_commodity sc where sc.store_id = si.id)
+        </if>
+        <if test="paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == false">
+            AND NOT EXISTS (select 1 from store_commodity sc where sc.store_id = si.id)
+        </if>
+        <if test="paveGoodsConditionInfo.paveGoodsList.size() > 0">
+            <foreach collection="paveGoodsConditionInfo.paveGoodsList" item="item" index="index">
+                <if test="item.commodityId != null">
+                    AND EXISTS (select 1 from store_commodity sc where sc.commodity_id = #{item.commodityId} and sc.store_id = si.id)
+                </if>
+                <if test="item.commodityId == null and item.commodityTypeId != null">
+                    AND EXISTS (select 1 from store_commodity sc inner join commodity como on como.id = sc.commodity_id and como.commodity_type_id = #{item.commodityTypeId} and como.supplier_id = #{item.supplierId} where sc.store_id = si.id)
+                </if>
+                <if test="item.commodityId == null and item.commodityTypeId == null and item.supplierId != null">
+                    AND EXISTS (select 1 from store_commodity sc inner join commodity como on como.id = sc.commodity_id and como.supplier_id = #{item.supplierId} where sc.store_id = si.id)
+                </if>
+            </foreach>
+        </if>
+    </sql>
+
+    <sql id="storeInfoConditionSQL">
+        <if test="available !=null">
+            AND si.available = #{available}
+        </if>
+        <if test='storeName != null and storeName != "" '>
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test='deviceId != null and deviceId != "" '>
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test='shopId != null and shopId != ""'>
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        <if test="storeSource != '' and storeSource != null">
+            AND si.store_source = #{storeSource}
+        </if>
+        <if test="isQualified !=null">
+            AND si.is_qualified = #{isQualified}
+        </if>
+    </sql>
+
+    <sql id="areaIdConditionSQL">
+        AND (
+            (1!=1)
+            <if test="regionIds.size() > 0">
+                OR  si.region_id in
+                <foreach collection="regionIds" index="index" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="hasAbnormalNode == true">
+                OR (si.province_id = '' || city_id = '' || region_id = '')
+            </if>
+            <if test="hasTestNode != null and hasTestNode == true">
+                OR si.is_test IS TRUE
+            </if>
+        )
+    </sql>
+
+    <sql id="isHasHeartConditionSQL">
+        <if test="hasHeart != null">
+            AND EXISTS (SELECT 1 FROM store_daily_statistic sds WHERE sds.store_id = si.id
+            <if test="heartStartTime != null">
+                AND sds.date &gt;= #{heartStartTime}
+            </if>
+            <if test="heartEndTime != null">
+                AND sds.date &lt;= #{heartEndTime}
+            </if>
+            <if test="hasHeart == true">
+                AND sds.opening_time_duration > 0
+            </if>
+            <if test="hasHeart == false">
+                AND sds.opening_time_duration = 0
+            </if>
+            )
+        </if>
+    </sql>
+
+    <sql id="getAreaIdListSubSQL">
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        FROM store_info si
+        INNER JOIN period_store_profit_statistic psps ON si.id = psps.`store_id` and psps.settled=0 AND psps.share_amount &gt; 0
+        and si.city_id != '' and si.province_id !='' and region_id !=''
+        INNER JOIN `area` n ON ${areaIdName} = n.id AND n.level = ${areaLevel}
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        where ( psps.settled_store_profit_id= '' or ssp.settle_status = 0
+        or (psps.settled_store_profit_id = #{id} and ssp.settle_status = 2  )
+        )
+
+    </sql>
+
+    <sql id="getAdvertisementAreaIdSubSQL">
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        from store_info si inner join contract_store cs on cs.store_id = si.id
+        inner join advertisement a on a.contract_id = cs.contract_id
+        and si.city_id != '' and si.province_id !='' and region_id !=''
+        INNER JOIN `area` n ON ${areaIdName} = n.id AND n.level = ${areaLevel}
+        and a.id = #{advertisementId}
+    </sql>
+
+    <sql id="storeDistanceConditionSQL">
+        <if test="storeDataMapInfo != null">
+            AND si.longitude &gt; #{storeDataMapInfo.leftTopLongitude} AND si.longitude &lt; #{storeDataMapInfo.rightBottomLongitude}
+            AND si.latitude &gt; #{storeDataMapInfo.rightBottomLatitude} AND si.latitude &lt; #{storeDataMapInfo.leftTopLatitude}
+        </if>
+    </sql>
+
+    <sql id = "getCustomerStoreAreaSQL">
+        SELECT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId,COUNT(si.id)AS storeCount FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0 AND si.store_type >0
+        AND si.`province_id` <![CDATA[ <> ]]> '' AND si.city_id <![CDATA[ <> ]]> '' AND si.region_id <![CDATA[ <> ]]> ''
+        INNER JOIN `area` n ON  ${areaIdName} = n.id AND n.level = ${areaLevel}
+        LEFT JOIN customer_store_plan_detail cspd on cspd.store_id=si.id AND cspd.customer_store_plan_id =#{customerStorePlanId}
+        WHERE  ((ap.ad_count > si.used_count) || cspd.store_id is not null)
+        GROUP BY n.id
+    </sql>
+
+    <sql id="isActive">
+        EXISTS (SELECT 1 from advertisement_daily_delivery_monitor_statistic where store_id=si.id limit 1)
+    </sql>
+
+    <sql id="queryStorePrimaryCondition">
+        and si.deleted=0 and si.store_type>0
+        <if test="provinceId != null and provinceId != '' ">
+            and si.province_id=#{provinceId}
+        </if>
+        <if test="cityId != null and cityId != '' ">
+            and si.city_id=#{cityId}
+        </if>
+        <if test="regionId != null and regionId != '' ">
+            and si.region_id=#{regionId}
+        </if>
+    </sql>
+
+    <sql id="customerStoreAvailableCondition">
+        (
+        <if test="isCheck == null">
+            (ap.ad_count > si.used_count) || cspd.id is not NULL
+        </if>
+        <if test="isCheck != null and isCheck == true">
+            cspd.id is not NULL
+        </if>
+        <if test="isCheck != null and isCheck == false">
+            (ap.ad_count > si.used_count) AND cspd.id is NULL
+        </if>
+        )
+    </sql>
+
+    <sql id="contractStoreAvailableCondition">
+        (
+        <if test="isCheck == null">
+            (ap.ad_count > si.used_count) || cs.id is not NULL
+        </if>
+        <if test="isCheck != null and isCheck == true">
+            cs.id is not NULL
+        </if>
+        <if test="isCheck != null and isCheck == false">
+            (ap.ad_count > si.used_count) AND cs.id is NULL
+        </if>
+        )
+    </sql>
+
+
+</mapper>

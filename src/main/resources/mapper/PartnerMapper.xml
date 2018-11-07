@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.PartnerMapper">
+    <select id="getPartnerProfitConfigInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerProfitConfigInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerProfitConfigInfoRequest">
+        SELECT
+        hpc.id as configId,
+        hpc.creator_id,
+        hpc.comparison_type,
+        hpc.type,
+        hpc.unit,
+        hpc.`value`,
+        hpc.object_id,
+        cp.`name` as partnerName
+        from historical_param_config hpc
+        INNER join cooperation_partner cp
+          on hpc.object_id=cp.id
+          and hpc.config_group=#{group}
+          and hpc.created_time <![CDATA[ < ]]> #{date} and hpc.updated_time > #{date}
+           order by hpc.created_time asc
+           LIMIT #{start}, #{pageSize}
+           ;
+    </select>
+
+    <select id="getPartnerProfitConfigInfoCount" resultType="java.lang.Long" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerProfitConfigInfoRequest">
+        SELECT
+        count(hpc.object_id)
+        from historical_param_config hpc
+        INNER join cooperation_partner cp
+        on hpc.object_id=cp.id
+        and hpc.config_group=#{group}
+        and hpc.created_time <![CDATA[ < ]]> #{date} and hpc.updated_time > #{date}
+        ;
+    </select>
+
+    <select id="getPartnerProfitConfigTime" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerProfitConfigInfo" parameterType="java.util.List">
+          SELECT
+        min(created_time)  created_time,
+        max(created_time)  updated_time,
+        object_id
+        from historical_param_config
+         WHERE
+        object_id in
+        <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+         group by object_id
+    </select>
+</mapper>

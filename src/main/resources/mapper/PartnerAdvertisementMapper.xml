@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.PartnerAdvertisementMapper">
+
+    <sql id="authorizedQuerySql" >
+        <if test="authenticationSql != null and authenticationSql != ''">
+            AND ${authenticationSql}
+        </if>
+    </sql>
+
+    <sql id="filterPartnerAdvertisementListSql" >
+        <if test="cooperationPartnerId != '' and cooperationPartnerId != null">
+            AND cp.id = #{cooperationPartnerId}
+        </if>
+        <if test="cooperationPattern != null">
+            AND cp.cooperation_pattern = #{cooperationPattern}
+        </if>
+        <if test="materialType != null">
+            AND pa.material_type = #{materialType}
+        </if>
+        <if test="thirdPartId != '' and thirdPartId != null">
+            AND pa.third_part_id like CONCAT('%', #{thirdPartId}, '%')
+        </if>
+        <include refid="authorizedQuerySql"></include>
+        <if test="nickname != '' and nickname != null">
+            INNER JOIN user u on u.id=cp.owner_id
+            AND u.nickname like CONCAT('%', #{nickname}, '%')
+        </if>
+    </sql>
+
+    <select id="queryPartnerAdvertisementList" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerAdvertisementListRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerAdvertisementListViewModel">
+        SELECT
+            pa.third_part_id thirdPartId,
+            pa.id id,
+            pa.material_type as materialType,
+            cp.`name` partnerName,
+            cp.cooperation_pattern cooperationPattern,
+            pa.advertisement_status as advertisementStatus,
+            cp.owner_id ownerId,
+            pa.updated_time updatedTime
+        from partner_advertisement pa
+        INNER JOIN cooperation_partner cp on pa.partner_id=cp.id
+        <include refid="filterPartnerAdvertisementListSql"></include>
+        <if test="advertisementStatus == 1 ">
+            AND pa.advertisement_status = 1
+        </if>
+        <if test="advertisementStatus == 2 ">
+            AND pa.advertisement_status = 2
+        </if>
+        <if test="advertisementStatus == 3 ">
+            AND pa.advertisement_status = 3
+        </if>
+        ORDER BY pa.updated_time DESC
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="queryPartnerAdvertisementListCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerAdvertisementListRequest" resultType="long">
+        SELECT
+          count(pa.id)
+        from partner_advertisement pa
+        INNER JOIN cooperation_partner cp on pa.partner_id=cp.id
+        <include refid="filterPartnerAdvertisementListSql"></include>
+        <if test="advertisementStatus == 1 ">
+            AND pa.advertisement_status = 1
+        </if>
+        <if test="advertisementStatus == 2 ">
+            AND pa.advertisement_status = 2
+        </if>
+        <if test="advertisementStatus == 3 ">
+            AND pa.advertisement_status = 3
+        </if>
+    </select>
+
+
+    <select id="getPartnerAdvertisementStatusStatistics" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerAdvertisementCountStatisticRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerAdvertisementCountStatisticInfo">
+        SELECT
+            ifnull(count(pa.id),0) totalCount,
+            ifnull(sum(case when pa.advertisement_status=1 then 1 else 0 END),0) deliveringCount,
+            ifnull(sum(case when pa.advertisement_status=2 then 1 else 0 END),0) takeOffCount,
+            ifnull(sum(case when pa.advertisement_status=3 then 1 else 0 END),0) finishedCount
+        from partner_advertisement pa
+        INNER JOIN cooperation_partner cp on pa.partner_id=cp.id
+        <include refid="filterPartnerAdvertisementListSql"></include>
+    </select>
+
+    <sql id="filterPartnerAdvertisementMonitorsSql" >
+        <if test="cooperationPartnerId != '' and cooperationPartnerId != null">
+            AND cp.id = #{cooperationPartnerId}
+        </if>
+        <if test="cooperationPattern != null">
+            AND cp.cooperation_pattern = #{cooperationPattern}
+        </if>
+        <if test="materialType != null">
+            AND pa.material_type = #{materialType}
+        </if>
+        <if test="thirdPartId != '' and thirdPartId != null">
+            AND pa.third_part_id like CONCAT('%', #{thirdPartId}, '%')
+        </if>
+        <include refid="authorizedQuerySql"></include>
+        <if test="nickname != '' and nickname != null">
+            INNER JOIN user u on u.id=cp.owner_id
+            AND u.nickname like CONCAT('%', #{nickname}, '%')
+        </if>
+        <if test="startTime != null">
+            AND pa.created_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND pa.created_time &lt;= #{endTime}
+        </if>
+    </sql>
+
+    <select id="queryPartnerAdvertisementMonitors" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerAdvertisementMonitorListRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.PartnerAdvertisementListViewModel">
+        SELECT
+        pa.third_part_id thirdPartId,
+        pa.id id,
+        pa.material_type materialType,
+        cp.`name` partnerName,
+        pa.created_time startTime,
+        cp.cooperation_pattern cooperationPattern,
+        case when pa.advertisement_status = 1 then 1 else 2 end status,
+        cp.owner_id ownerId,
+        pa.updated_time updatedTime
+        from partner_advertisement pa
+        INNER JOIN cooperation_partner cp on pa.partner_id=cp.id
+        <include refid="filterPartnerAdvertisementMonitorsSql"></include>
+        <if test="status == 1">
+            AND pa.advertisement_status = 1
+        </if>
+        <if test="status == 2">
+            AND pa.advertisement_status <![CDATA[ <> ]]> 1
+        </if>
+        ORDER BY pa.updated_time DESC
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="queryPartnerAdvertisementMonitorsCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerAdvertisementMonitorListRequest" resultType="long">
+        SELECT
+        count(pa.id)
+        from partner_advertisement pa
+        INNER JOIN cooperation_partner cp on pa.partner_id=cp.id
+        <include refid="filterPartnerAdvertisementMonitorsSql"></include>
+        <if test="status == 1">
+            AND pa.advertisement_status = 1
+        </if>
+        <if test="status == 2">
+            AND pa.advertisement_status <![CDATA[ <> ]]> 1
+        </if>
+    </select>
+
+    <select id="getPartnerAdvertisementMonitorStatusStatistics" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerAdvertisementMonitorCountStatisticRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerAdvertisementMonitorCountStatisticInfo">
+        SELECT
+        ifnull(count(pa.id),0) totalCount,
+        ifnull(SUM(CASE WHEN pa.`advertisement_status` = 1 THEN 1 ELSE 0 END), 0) OnWatchingCount
+        from partner_advertisement pa
+        INNER JOIN cooperation_partner cp on pa.partner_id=cp.id
+        <include refid="filterPartnerAdvertisementMonitorsSql"></include>
+    </select>
+
+    <insert id="savePartnerAdvertisements">
+        INSERT INTO `partner_advertisement` (
+        `id`,
+        `created_time`,
+        `updated_time`,
+        `partner_id`,
+        `third_part_id`,
+        `advertisement_status`,
+        `name`
+        )
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (
+            #{item.id}
+            ,now()
+            ,now()
+            ,#{item.partnerId},
+            #{item.thirdPartId},
+            #{item.advertisementStatus},
+            #{item.name}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+        advertisement_status=VALUES(`advertisement_status`),
+        updated_time=now();
+    </insert>
+
+    <update id="updatePartnerAdvertisementMaterialType"  parameterType="java.util.List">
+        update partner_advertisement pa
+        set material_type=
+        case when EXISTS(SELECT 1 from partner_advertisement_material where  partner_advertisement_id =pa.id and  material_type=1)
+        and EXISTS(SELECT 1 from partner_advertisement_material where  partner_advertisement_id = pa.id and  material_type=3) then 4
+        when EXISTS(SELECT 1 from partner_advertisement_material where  partner_advertisement_id = pa.id and  material_type=1)then 1
+        when EXISTS(SELECT 1 from partner_advertisement_material where  partner_advertisement_id = pa.id and  material_type=3)then 3 ELSE 0 END
+        WHERE pa.id in
+        <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+    </update>
+
+    <insert id="savePartnerAdvertisementMaterials">
+        INSERT ignore INTO `partner_advertisement_material` (
+        `duration`,
+        `material_size`,
+        `material_specification`,
+        `material_type`,
+        `md5`,
+        `original_url`,
+        `partner_advertisement_id`,
+        `url`
+        )
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (
+            #{item.duration},
+            #{item.materialSize},
+            #{item.materialSpecification},
+            #{item.materialType},
+            #{item.md5},
+            #{item.originalUrl},
+            #{item.partnerAdvertisementId},
+            #{item.url}
+            )
+        </foreach>
+    </insert>
+
+    <insert id="updatePartnerRequestStatistic">
+        INSERT INTO `partner_daily_store_monitor_statistic` (
+            `partner_id`,
+            `store_id`,
+            `date`,
+            `advertisement_position_category`,
+            `get_ad_times`,
+            `get_no_ad_times`,
+            `api_error_times`
+        )
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (
+            #{item.partnerId},
+            #{item.storeId},
+            #{item.date},
+            #{item.advertisementPositionCategory},
+            #{item.getAdTimes},
+            #{item.getNoAdTimes},
+            #{item.apiErrorTimes}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+        get_ad_times=VALUES(`get_ad_times`)+ get_ad_times,
+        get_no_ad_times=VALUES(`get_no_ad_times`)+ get_no_ad_times,
+        api_error_times=VALUES(`api_error_times`)+ api_error_times
+    </insert>
+
+    <insert id="updatePartnerAdvertisementDisplayStatistic">
+        INSERT INTO `partner_daily_store_monitor_statistic` (
+        `partner_id`,
+        `store_id`,
+        `date`,
+        `advertisement_position_category`,
+        `display_times`,
+        `valid_times`
+        )
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (
+            #{item.partnerId},
+            #{item.storeId},
+            #{item.date},
+            #{item.advertisementPositionCategory},
+            #{item.displayTimes},
+            #{item.validTimes}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+        display_times=VALUES(`display_times`)+ display_times,
+        valid_times=VALUES(`valid_times`)+ valid_times
+    </insert>
+
+    <update id="finishPartnerAdvertisement" parameterType="java.util.List">
+        UPDATE partner_advertisement set advertisement_status =3,updated_time =now() WHERE id in
+        <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+    </update>
+
+    <update id="updatePriority">
+        update cooperation_partner cp
+        set cp.priority = cp.priority + #{movedStep}
+        where cp.priority <![CDATA[ >= ]]> #{startPriority}  and cp.priority <![CDATA[ <= ]]> #{endPriority}
+    </update>
+
+    <select id="partnerAdvertisementRequestLogStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.CooperationPartnerChartBaseRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.CooperationPartnerChartRequestTimesViewModel">
+        SELECT
+            cp.id,
+            cp.name,
+            temp.requestSuccessTimes requestSuccessTimes,
+            temp.requestTimes requestTimes
+        from cooperation_partner cp
+        left join
+            (select
+                partner_id,
+                ifnull(sum(pdsms.get_ad_times),0) requestSuccessTimes,
+                ifnull(sum(pdsms.get_ad_times+pdsms.get_no_ad_times+pdsms.api_error_times),0) requestTimes
+            from partner_daily_store_monitor_statistic pdsms
+            where 1=1
+            <if test="startTime != null">
+                AND pdsms.date <![CDATA[ >= ]]> #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND pdsms.date <![CDATA[ <= ]]> #{endTime}
+            </if>
+            group by pdsms.partner_id) temp
+        on cp.id=temp.partner_id
+        <if test="sortNumber == 1">
+            order by requestTimes desc,cp.id asc
+        </if>
+        <if test="sortNumber == 2">
+            order by requestSuccessTimes desc,cp.id asc
+        </if>
+    </select>
+
+    <select id="getStorePartners"  resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.BasePartnerInfo">
+        SELECT  id as partnerId,`name` from cooperation_partner where id in
+        <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+    </select>
+
+
+    <insert id="reCalcPartnerAdvertisementDisplayStatistic">
+        INSERT INTO `partner_daily_store_monitor_statistic` (
+        `partner_id`,
+        `store_id`,
+        `date`,
+        `advertisement_position_category`,
+        `display_times`,
+        `valid_times`
+        )
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (
+            #{item.partnerId},
+            #{item.storeId},
+            #{item.date},
+            #{item.advertisementPositionCategory},
+            #{item.displayTimes},
+            #{item.validTimes}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+        display_times= VALUES(`display_times`),
+        valid_times= VALUES(`valid_times`)
+    </insert>
+
+    <update id="updateAdSlotPriority" parameterType="com.sztouyun.advertisingsystem.viewmodel.partner.UpdatedAdSlotPriorityInfo">
+        update partner_ad_slot_config pasc
+        set pasc.priority = pasc.priority + #{movedStep},pasc.updater_id = #{updaterId},pasc.updated_time = #{updatedTime}
+        where pasc.priority <![CDATA[ >= ]]> #{startPriority}  and pasc.priority <![CDATA[ <= ]]> #{endPriority}
+    </update>
+
+    <select id="getStoreRequestPartnerInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.IdDatePageRequest"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.partner.StoreRequestPartnerInfo">
+        SELECT
+        si.store_no shopId,
+        si.store_name,
+        si.province_id ,
+        si.city_id ,
+        si.region_id ,
+        temp.validTimes,
+        temp.successfulTimes,
+        temp.requestTimes
+        FROM
+        store_info si
+        INNER JOIN(
+            SELECT pdsms.store_id,SUM(pdsms.valid_times) as validTimes,
+            SUM(pdsms.get_ad_times) as successfulTimes,
+            sum(pdsms.get_ad_times+pdsms.get_no_ad_times+pdsms.api_error_times) as requestTimes FROM
+            partner_daily_store_monitor_statistic pdsms
+            where pdsms.partner_id=#{id} and pdsms.date <![CDATA[ <= ]]> #{endTime}
+            <if test="startTime != null">
+                and pdsms.date >= #{startTime}
+            </if>
+            and pdsms.store_id in (
+              SELECT store_id from (SELECT store_id from partner_media_config where
+              partner_id=#{id} ORDER BY store_id  LIMIT #{start}, #{pageSize}) as t
+            ) GROUP BY pdsms.store_id
+        ) temp on si.id=temp.store_id
+    </select>
+    <select id="getPartnerConfigStoreCount" parameterType="string" resultType="long">
+        SELECT count(store_id) from partner_media_config where
+              partner_id=#{id}
+    </select>
+</mapper>

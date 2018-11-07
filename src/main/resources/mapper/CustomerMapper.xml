@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.CustomerMapper">
+
+    <sql id="authorizedQuerySql" >
+        <if test="authenticationSql != null and authenticationSql != ''">
+            AND ${authenticationSql}
+        </if>
+    </sql>
+
+    <select id="getCustomerAreaStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.common.BaseAuthenticationInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.index.CustomerAreaStatisticDto">
+        select
+              area.`name` areaName,
+              IFNULL(signed.total_customer,0) customerCount,
+              IFNULL(signed.sign_number,0) signedCount
+        from area area
+
+        LEFT JOIN
+        (
+            SELECT
+                customer.province_id,
+                COUNT(customer.id) total_customer ,
+                count(t.customer_id) as sign_number
+            FROM customer customer
+            LEFT JOIN
+            (
+                 select
+                        DISTINCT customer_id
+                  from contract
+                  where contract_status in (4,5,6,7)
+            ) t on customer.id =t.customer_id
+          where 1 = 1
+         <include refid="authorizedQuerySql"></include>
+            GROUP BY customer.province_id
+        ) signed
+        on
+            area.id=signed.province_id
+            AND
+            area.`level`=1
+        where area.`level`=1
+        ORDER BY customerCount
+        desc;
+    </select>
+
+
+    <select id="getCustomerProvinceAreaDetailStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.common.MyPageOffsetRequest"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.statistic.CustomerAreaStatisticResult">
+
+        SELECT  province_id areaId, COUNT(customer.id) totalCustomer ,COUNT(t.customer_id)  AS  totalSignedCustomer FROM customer
+            LEFT JOIN
+            (
+            SELECT DISTINCT customer_id FROM contract WHERE  contract_status IN (4, 5, 6, 7)
+            ) t ON customer.id  =t.customer_id
+            where 1 = 1
+            <include refid="authorizedQuerySql"></include>
+            GROUP BY customer.province_id
+            ORDER BY totalCustomer DESC
+            limit #{offset}, #{pageSize}
+    </select>
+
+
+    <select id="getCustomerProvinceAreaDetailStatisticCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.common.MyPageOffsetRequest" resultType="long">
+        SELECT
+            COUNT(DISTINCT customer.province_id)
+          FROM
+            customer
+          WHERE 1 = 1
+         <include refid="authorizedQuerySql"></include>
+    </select>
+
+
+    <select id="getCustomerCityAreaDetailStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.common.BaseAuthenticationInfo"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.statistic.CustomerAreaStatisticResult">
+        SELECT city_id areaId, COUNT(customer.id) totalCustomer ,COUNT(t.customer_id) AS  totalSignedCustomer FROM customer
+            LEFT JOIN
+            (
+            SELECT DISTINCT customer_id FROM contract WHERE  contract_status IN (4, 5, 6, 7)
+            ) t ON customer.id  =t.customer_id
+            WHERE customer.province_id = #{provinceId}
+            <include refid="authorizedQuerySql"></include>
+            GROUP BY customer.city_id
+            ORDER BY totalCustomer DESC
+    </select>
+
+    <select id="customerOverViewStatistic" resultType="com.sztouyun.advertisingsystem.viewmodel.customer.CustomerOverViewStatisticViewModel">
+        select
+        count(id) as totalCustomerCount,
+        (select sum(case when exists(select 1 from contract c inner join contract_operation_log col on col.contract_id = c.id and operation = 3 and successed is true
+        where c.customer_id = cu.id limit 1) then 1 else 0 end)) as signCount,
+        (select sum(case when exists(select 1 from advertisement a inner join advertisement_operation_log aol on aol.advertisement_id = a.id and aol.operation = 3 and aol.successed is true
+        where a.customer_id = cu.id limit 1) then 1 else 0 end)) as deliveryCount
+        from customer cu
+    </select>
+
+    <select id="getCustomerTotalProfit" resultType="double">
+      select sum(total_cost) from contract c
+      where exists (select 1 from contract_operation_log col where col.operation = 11 and col.successed is true and col.contract_id = c.id limit 1)
+    </select>
+
+    <select id="getCustomerCount" parameterType="java.util.Date" resultType="long">
+        SELECT count(1) from customer where created_time  <![CDATA[ < ]]> #{date}
+    </select>
+
+    <select id="industryProfitRanking" resultType="com.sztouyun.advertisingsystem.viewmodel.customer.IndustryProfitRankingViewModel">
+        select sum(c.total_cost) profit, cu.industry_id industryId
+            from customer cu inner join contract c on cu.id = c.customer_id
+            and exists (select 1 from contract_operation_log col where col.operation = 11 and col.successed is true and col.contract_id = c.id limit 1 )
+            group by cu.industry_id
+            order by profit desc, cu.customer_number asc
+            limit 20
+    </select>
+
+</mapper>

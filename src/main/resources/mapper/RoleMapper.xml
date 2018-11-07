@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.RoleMapper">
+    <sql id="Base_Column_List">
+        id, created_time, creator_id, updated_time, description, enable_flag, role_name, role_type
+    </sql>
+
+    <resultMap id="RoleResultMap" type="com.sztouyun.advertisingsystem.model.account.Role">
+        <id column="id" property="id"/>
+        <result column="created_time" property="createdTime"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="updated_time" property="updatedTime"/>
+        <result column="description" property="description"/>
+        <result column="enable_flag" property="enableFlag"/>
+        <result column="role_name" property="roleName"/>
+        <result column="role_type" property="roleType"/>
+    </resultMap>
+
+    <select id="getAccessibleRoles" resultMap="RoleResultMap" parameterType="java.lang.String">
+        SELECT
+            <include refid="Base_Column_List"/>, COUNT(rp.permission_id) permissionCount
+        FROM role rl
+        LEFT JOIN role_permission rp ON rl.id = rp.role_id
+        where id not in(
+            SELECT
+                r.id
+            FROM
+                role r
+            INNER JOIN role_menu rm ON r.id = rm.role_id
+            WHERE rm.menu_id not in (SELECT menu_id from role_menu where role_id = #{roleId})
+            UNION ALL
+            SELECT
+                r.id
+            FROM
+                role r
+            INNER JOIN role_permission rm ON r.id = rm.role_id
+            WHERE rm.permission_id not in (SELECT permission_id from role_permission where role_id = #{roleId})
+        ) GROUP BY rl.id
+        ORDER BY permissionCount;
+    </select>
+</mapper>

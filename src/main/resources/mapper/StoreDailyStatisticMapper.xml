@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.StoreDailyStatisticMapper">
+    <insert id="saveStoreDailyStatistics">
+        INSERT INTO `store_daily_statistic` (`date`,`created_time`, `updated_time`, `store_id`, `order_count`,opening_time_begin,opening_time_end,opening_time_duration,available, total_ad_position_count, used_ad_position_count)
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (#{item.date, jdbcType=DATE},now(),now(), #{item.storeId},#{item.orderCount},#{item.openingTimeBegin},#{item.openingTimeEnd},#{item.openingTimeEnd}-#{item.openingTimeBegin},#{item.available}, #{item.totalAdPositionCount},
+            #{item.usedAdPositionCount}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE order_count=VALUES(`order_count`),
+        updated_time=VALUES(`date`),
+        total_ad_position_count=VALUES(`total_ad_position_count`),
+        used_ad_position_count=VALUES(`used_ad_position_count`)
+    </insert>
+
+    <select id="getStoreNumStatistics"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreNumStatistics"
+            parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreAdFillTrendRequest">
+        SELECT
+        date,
+        COUNT(store_id) storeTotal,
+        IFNULL(SUM(CASE WHEN total_ad_position_count = used_ad_position_count THEN 1 ELSE 0 END), 0) fullStoreNum,
+        IFNULL(SUM(CASE WHEN used_ad_position_count = 0 THEN 1 ELSE 0 END), 0) usedAdPositionEqualZeroStoreNum,
+        IFNULL(SUM(CASE WHEN used_ad_position_count &gt; 0 AND used_ad_position_count &lt; total_ad_position_count * 0.5 THEN 1 ELSE 0 END), 0) usedAdPositionLessThanFiftyPercentStoreNum,
+        IFNULL(SUM(CASE WHEN used_ad_position_count &gt;= total_ad_position_count * 0.5 AND total_ad_position_count != used_ad_position_count THEN 1 ELSE 0 END), 0) usedAdPositionGreaterThanEqualFiftyPercentStoreNum
+        FROM store_daily_statistic
+        <where>
+            <if test="beginDate != null">
+                AND date &gt;= #{beginDate}
+            </if>
+            <if test="endDate != null">
+                AND date &lt;= #{endDate}
+            </if>
+        </where>
+        GROUP BY date
+    </select>
+</mapper>

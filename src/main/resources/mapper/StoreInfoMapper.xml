@@ -1,0 +1,1148 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.StoreInfoMapper">
+
+
+
+    <select id="getStoreAdvertisementInfo" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreAdvertisementInfoViewModel">
+        SELECT
+            sie.profitability AS profitability,
+            sie.residential_district_count AS residentialDistrictCount,
+            case WHEN IFNULL(si.outside_picture,'')= '' then  sie.outside_picture  else si.outside_picture end as outsidePicture,
+            case WHEN IFNULL(si.inside_picture, '')= '' then  sie.inside_picture  else si.inside_picture end as insidePicture,
+            sie.cash_register_picture AS cashRegisterPicture,
+            sie.bank_card AS bankCard,
+            sie.store_front_type AS storeFrontType,
+            sie.daily_sales AS dailySales,
+            sie.decoration AS decoration,
+            sie.commercial_area AS commercialArea,
+            sie.order_ratio AS orderRatio,
+            si.store_name AS storeName,
+            si.device_id AS deviceId,
+            si.store_address AS storeAddress,
+            si.available AS available,
+            si.city_id AS cityId,
+            si.province_id AS provinceId,
+            si.region_id AS regionId,
+            si.store_no AS shopId,
+            si.latitude,
+            si.longitude,
+            si.is_using AS used,
+            (SELECT COUNT(*) FROM advertisement a INNER JOIN contract_store cs ON cs.`contract_id` = a.`contract_id` where si.id = cs.store_id) as advertisementTotalCount,
+            IFNULL((SELECT count(DISTINCT addms.advertisement_id) from advertisement_daily_delivery_monitor_statistic addms where addms.store_id=#{storeId} ),0) advertisementActiveCount,
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isActive"/> as active
+        FROM
+            store_info si
+        LEFT JOIN store_info_extension sie ON si.id=sie.id
+        where si.id=#{storeId}
+    </select>
+
+    <select id="getStoreInfoStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoStatisticQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoStatisticViewModel">
+        SELECT
+        si.id AS storeId,
+        si.store_name AS storeName,
+        si.store_no AS shopId,
+        si.province_id AS provinceId,
+        si.city_id AS cityId,
+        si.region_id AS regionId,
+        si.store_address AS storeAddress,
+        si.device_id AS deviceId,
+        si.is_qualified AS isQualified,
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isActive"/> as active,
+        EXISTS(select 1 from store_info_extension sie where sie.id = si.id) as isStorePortrait,
+        <if test="paveGoodsConditionInfo.isPaveGoods == null
+                       and paveGoodsConditionInfo.paveGoodsList.size() == 0">
+            EXISTS(select 1 from store_commodity sc where sc.store_id = si.id) as isPaveGoods,
+        </if>
+        <if test="(paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == true) or
+                    (paveGoodsConditionInfo.isPaveGoods == null and paveGoodsConditionInfo.paveGoodsList.size() > 0)">
+            TRUE as isPaveGoods,
+        </if>
+        <if test="paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == false">
+            FALSE as isPaveGoods,
+        </if>
+        si.available AS available,
+        si.is_using AS used
+        FROM
+        store_info si
+        <include refid="store_info_statistic_condition"/>
+        ORDER BY
+        si.id
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <sql id="store_info_statistic_condition">
+        <where>
+            si.deleted =0 AND si.store_type > 0
+            <if test="provinceId != '' and provinceId != null">
+                AND si.province_id = #{provinceId}
+            </if>
+
+            <if test="cityId != '' and cityId !=null">
+                AND si.city_id = #{cityId}
+            </if>
+
+            <if test="regionId != '' and regionId !=null">
+                AND si.region_id = #{regionId}
+            </if>
+
+            <if test="storeName != '' and storeName != null">
+                AND si.store_name like CONCAT('%', #{storeName}, '%')
+            </if>
+
+            <if test="deviceId != '' and deviceId != null">
+                AND si.device_id like CONCAT('%', #{deviceId}, '%')
+            </if>
+
+            <if test="shopId != '' and shopId != null">
+                AND si.store_no like  CONCAT('%',#{shopId},'%')
+            </if>
+
+            <if test="available !=null">
+                AND si.available = #{available}
+            </if>
+            <if test="isQualified != null">
+                AND si.is_qualified = #{isQualified}
+            </if>
+            <if test="active == true">
+                AND <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isActive"/>
+            </if>
+            <if test="active == false">
+                AND NOT <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isActive"/>
+            </if>
+            <if test="used == false">
+                AND si.is_using = #{used}
+            </if>
+            <if test="storeSource != '' and storeSource != null">
+                AND si.store_source = #{storeSource}
+            </if>
+            <if test="isStorePortrait == true">
+                AND EXISTS (select 1 from store_info_extension sie where sie.id = si.id)
+            </if>
+            <if test="isStorePortrait == false">
+                AND not EXISTS (select 1 from store_info_extension sie where sie.id = si.id)
+            </if>
+            <if test="enableProfitShare == true">
+                AND EXISTS (SELECT  a.id FROM contract_store cs INNER JOIN advertisement a on cs.contract_id=a.contract_id AND
+                a.enable_profit_share = TRUE where cs.store_id=si.id )
+            </if>
+            <if test="enableProfitShare == false">
+                AND NOT EXISTS
+                (
+                SELECT a.id FROM contract_store cs INNER JOIN advertisement a on
+                cs.contract_id=a.contract_id AND
+                a.enable_profit_share = TRUE where cs.store_id=si.id
+                )
+            </if>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+        </where>
+    </sql>
+
+    <select id="getStoreInfoStatisticCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoStatisticQueryRequest" resultType="long">
+        SELECT count(si.id)
+        FROM
+        store_info si
+        <include refid="store_info_statistic_condition"/>
+    </select>
+
+    <select id="queryStoreList" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.ContractStoreQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.contract.ContractStoreInfo">
+        SELECT  si.id id,si.store_name storeName ,si.store_address storeAddress,si.province_id provinceId,si.city_id cityId,si.region_id regionId,si.device_id deviceId, si.available,
+        si.is_qualified, si.used_count AS usedCount,(IFNULL(ap.ad_count,0)-si.used_count)  availableCount,si.store_no AS shopId, abs(si.deleted - 1) as canView
+        FROM store_info si
+        INNER JOIN contract_store cst ON  cst.contract_id= #{contractId} AND si.id=cst.store_id
+        <include refid="query_store_list_condition"/>
+        LEFT JOIN ad_position ap ON ap.store_type = si.store_type
+        LEFT JOIN
+        (select asps.store_id storeId,
+        sum(asps.share_amount *100)/100  as shareAmount
+        from advertisement_store_profit_period_statistic asps where asps.advertisement_id =#{advertisementId} GROUP BY asps.store_id
+        ) temp on temp.storeId=si.id
+        ORDER BY temp.shareAmount DESC,si.store_no asc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <sql id="query_store_list_condition">
+        <if test='storeName != "" '>
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="available !=null">
+            AND si.available = #{available}
+        </if>
+        <if test='deviceId != "" '>
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test='shopId != ""'>
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        <if test="storeSource != '' and storeSource != null">
+            AND si.store_source = #{storeSource}
+        </if>
+        <if test="provinceId != '' and provinceId != null">
+            AND si.province_id = #{provinceId}
+        </if>
+        <if test="cityId != ''and cityId !=null">
+            AND si.city_id = #{cityId}
+        </if>
+        <if test="regionId != '' and regionId !=null">
+            AND si.region_id = #{regionId}
+        </if>
+        <if test="isQualified != null">
+            AND si.is_qualified = #{isQualified}
+        </if>
+    </sql>
+
+    <select id="queryStoreListCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.ContractStoreQueryRequest" resultType="long">
+        SELECT  count(si.id)
+        FROM store_info si
+        INNER JOIN contract_store cst ON  cst.contract_id= #{contractId} AND si.id=cst.store_id
+        <include refid="query_store_list_condition"/>
+    </select>
+
+    <select id="getStoreInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoQueryResult">
+        (SELECT si.id, si.store_name AS storeName, si.store_type, si.city_id cityId,si.store_address storeAddress, si.available,
+        CASE WHEN  cs.id IS NULL THEN 0 ELSE  1 END  AS isChoose,
+        si.`region_id` AS regionId,
+        si.device_id AS deviceId,
+        <if test="hasHeart == null">
+            IFNULL((SELECT sds.opening_time_duration FROM store_daily_statistic sds WHERE sds.store_id = si.id AND sds.`opening_time_duration` > 0
+            <if test="heartStartTime != null">
+                AND sds.date &gt;= #{heartStartTime}
+            </if>
+            <if test="heartEndTime != null">
+                AND sds.date &lt;= #{heartEndTime}
+            </if>
+            LIMIT 1) , 0 ) AS hasHeart,
+        </if>
+        <if test="hasHeart == true">
+            TRUE AS hasHeart,
+        </if>
+        <if test="hasHeart == false">
+            FALSE AS hasHeart,
+        </if>
+        <if test="paveGoodsConditionInfo.isPaveGoods == null
+               and paveGoodsConditionInfo.paveGoodsList.size() == 0">
+            EXISTS(select 1 from store_commodity sc where sc.store_id = si.id) as isPaveGoods,
+        </if>
+        <if test="(paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == true) or
+            (paveGoodsConditionInfo.isPaveGoods == null and paveGoodsConditionInfo.paveGoodsList.size() > 0)">
+            TRUE as isPaveGoods,
+        </if>
+        <if test="paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == false">
+            FALSE as isPaveGoods,
+        </if>
+        si.store_no AS shopId,
+        si.is_qualified
+        FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type
+        AND si.store_type = #{storeType} AND si.deleted = 0
+        <if test="hasTestNode == false">
+            AND si.is_test=false
+        </if>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.areaIdConditionSQL"></include>
+        LEFT JOIN contract_store cs on si.id =cs.store_id AND  cs.contract_id = #{contractId}
+        WHERE
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.contractStoreAvailableCondition"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isHasHeartConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            ORDER BY si.store_no ASC
+            LIMIT #{topCount}
+        </if>
+        )
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            UNION
+            (SELECT si.id, si.store_name AS storeName, si.store_type, si.city_id cityId,si.store_address storeAddress, si.available,
+            CASE WHEN  cs.id IS NULL THEN 0 ELSE  1 END  AS isChoose,
+            si.`region_id` AS regionId,
+            si.device_id AS deviceId,
+            <if test="hasHeart == null">
+                IFNULL((SELECT sds.opening_time_duration FROM store_daily_statistic sds WHERE sds.store_id = si.id AND sds.`opening_time_duration` > 0
+                <if test="heartStartTime != null">
+                    AND sds.date &gt;= #{heartStartTime}
+                </if>
+                <if test="heartEndTime != null">
+                    AND sds.date &lt;= #{heartEndTime}
+                </if>
+                LIMIT 1) , 0 ) AS hasHeart,
+            </if>
+            <if test="hasHeart == true">
+                TRUE AS hasHeart,
+            </if>
+            <if test="hasHeart == false">
+                FALSE AS hasHeart,
+            </if>
+            <if test="paveGoodsConditionInfo.isPaveGoods == null
+                   and paveGoodsConditionInfo.paveGoodsList.size() == 0">
+                EXISTS(select 1 from store_commodity sc where sc.store_id = si.id) as isPaveGoods,
+            </if>
+            <if test="(paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == true) or
+                (paveGoodsConditionInfo.isPaveGoods == null and paveGoodsConditionInfo.paveGoodsList.size() > 0)">
+                TRUE as isPaveGoods,
+            </if>
+            <if test="paveGoodsConditionInfo.isPaveGoods != null and paveGoodsConditionInfo.isPaveGoods == false">
+                FALSE as isPaveGoods,
+            </if>
+            si.store_no AS shopId,
+            si.is_qualified
+            FROM store_info si
+            INNER JOIN ad_position ap ON si.store_type = ap.store_type
+            <if test="hasTestNode == false">
+                AND si.is_test=false
+            </if>
+            AND si.store_type = #{storeType} AND si.deleted = 0
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+            LEFT JOIN contract_store cs on si.id =cs.store_id AND  cs.contract_id = #{contractId}
+            WHERE
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.contractStoreAvailableCondition"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isHasHeartConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+            ORDER BY si.store_no ASC
+            LIMIT #{topCount}
+            )
+        </if>
+        ORDER BY shopId ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="getStoreInfoCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoQueryRequest" resultType="long">
+        select count(id) from (
+        select si.id from store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0 AND si.store_type = #{storeType}
+        <if test="hasTestNode == false">
+            AND si.is_test=false
+        </if>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.areaIdConditionSQL"></include>
+        LEFT JOIN contract_store cs on si.id = cs.store_id AND cs.contract_id = #{contractId}
+        WHERE
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.contractStoreAvailableCondition"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isHasHeartConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            UNION
+            select si.id from store_info si
+            INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0 AND si.store_type =
+            #{storeType}
+            <if test="hasTestNode == false">
+                AND si.is_test=false
+            </if>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+            LEFT JOIN contract_store cs on si.id = cs.store_id AND cs.contract_id = #{contractId}
+            WHERE
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.contractStoreAvailableCondition"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isHasHeartConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+        </if>
+        ) tmp
+    </select>
+
+
+
+
+
+
+
+    <update id="calculateStoreTypeByConfig" parameterType="java.util.List">
+        <foreach collection="list" index="index" item="item" separator=";">
+            <if test="item.leftSymbol != null or item.rightSymbol  != null">
+                update
+                store_info
+                set
+                store_type = ${item.storeType}
+                WHERE 1=1
+                <if test="item.leftSymbol != null ">
+                    <choose>
+                        <when test='item.rightSymbol == null and item.leftSymbol==1 and item.avgDailyTradingAmountMin==0'>
+                            AND transaction_count =0
+                        </when>
+                        <otherwise>
+                            AND transaction_count/DATEDIFF(NOW(),created_at) ${item.leftComparisonTypeValue} ${item.avgDailyTradingAmountMin}
+                        </otherwise>
+                    </choose>
+                </if>
+                <if test="item.rightSymbol != null ">
+                    <choose>
+                        <when test='item.leftSymbol == null and item.rightSymbol==1 and item.avgDailyTradingAmountMax==0'>
+                            AND transaction_count =0
+                        </when>
+                        <otherwise>
+                            AND transaction_count/DATEDIFF(NOW(),created_at) ${item.rightComparisonTypeValue} ${item.avgDailyTradingAmountMax}
+                        </otherwise>
+                    </choose>
+
+                </if>
+            </if>
+        </foreach>
+       ; UPDATE store_info set store_type =4 where store_type =0;
+    </update>
+
+
+    <insert id="oneKeyInsertStoreToContract" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.OneKeyInsertStoreInfoRequest">
+        INSERT INTO contract_store (contract_id, store_id, store_type)
+        SELECT contract_id, store_id, store_type FROM (
+        (SELECT #{contractId} AS contract_id, si.id AS store_id, si.store_type AS store_type
+        FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type
+        <if test="hasTestNode == false">
+            AND si.is_test=false
+        </if>
+        AND si.store_type = #{storeType} AND si.deleted = 0
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.areaIdConditionSQL"></include>
+        LEFT JOIN contract_store cs on si.id =cs.store_id AND cs.contract_id = #{contractId}
+        LEFT JOIN store_daily_statistic sds on sds.store_id = si.id and sds.date = #{previousDate}
+        WHERE (ap.ad_count > si.used_count) AND cs.id is NULL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isHasHeartConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+        order by sds.order_count desc
+        LIMIT #{insertCount}
+        )
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            UNION
+            (SELECT #{contractId} AS contract_id, si.id AS store_id, si.store_type AS
+            store_type
+            FROM store_info si
+            INNER JOIN ad_position ap ON si.store_type = ap.store_type
+            <if test="hasTestNode == false">
+                AND si.is_test=false
+            </if>
+            AND si.store_type = #{storeType} AND si.deleted = 0
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+            LEFT JOIN contract_store cs on si.id =cs.store_id AND cs.contract_id = #{contractId}
+            LEFT JOIN store_daily_statistic sds on sds.store_id = si.id and sds.date = #{previousDate}
+            WHERE (ap.ad_count > si.used_count) AND cs.id is NULL
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isHasHeartConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.isPaveGoodsConditionSQL"></include>
+            order by sds.order_count desc
+            LIMIT #{insertCount}
+            )
+        </if>
+        LIMIT #{insertCount}
+        ) tmp
+    </insert>
+
+    <select id="getContractStoreAreaId" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoAreaSelectedViewModel" resultType="com.sztouyun.advertisingsystem.viewmodel.store.ContractStoreCheckTreeViewModel">
+        SELECT si.region_id regionId, si.is_test isTest FROM store_info si INNER JOIN contract_store cs ON cs.`store_id` = si.id AND cs.`contract_id` = #{contractId} AND si.store_type = #{storeType} GROUP BY si.region_id, si.is_test
+    </select>
+
+    <select id="existsTestContractStore" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoAreaSelectedViewModel" resultType="java.lang.Boolean">
+        SELECT 1 FROM store_info si INNER JOIN contract_store cs ON cs.`store_id` = si.id AND cs.`contract_id` = #{contractId} AND si.store_type = #{storeType} AND si.is_test IS TRUE limit 1;
+    </select>
+
+    <select id="getAreaByContainStoreInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoAreaSelectedViewModel" resultType="com.sztouyun.advertisingsystem.viewmodel.system.AreaStoreInfo">
+        <include refid="getAreaByContainStoreInfoSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="getAreaByContainStoreInfoSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="getAreaByContainStoreInfoSQL">
+            <property name="areaIdName" value="si.region_id"/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+
+    <sql id = "getAreaByContainStoreInfoSQL">
+        SELECT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId,COUNT(si.id)AS storeCount FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0 AND si.store_type = #{storeType}
+        AND si.`province_id` <![CDATA[ <> ]]> '' AND si.city_id <![CDATA[ <> ]]> '' AND si.region_id <![CDATA[ <> ]]> ''
+        INNER JOIN `area` n ON  ${areaIdName} = n.id AND n.level = ${areaLevel} AND si.is_test IS FALSE
+        LEFT JOIN contract_store cs on si.id = cs.store_id AND  cs.contract_id = #{contractId}
+        WHERE (ap.ad_count > si.used_count) || cs.id is not NULL
+        GROUP BY n.id
+    </sql>
+
+    <select id="getAreaInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoAreaSelectedViewModel" resultType="com.sztouyun.advertisingsystem.model.system.Area">
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        FROM store_info si
+        INNER JOIN `area` n ON si.province_id = n.id  AND n.level = 1 and si.store_type > 0
+        <if test="contractId != null and contractId != ''">
+            INNER JOIN contract_store cs ON si.id = cs.`store_id`
+            AND cs.`contract_id` = #{contractId}
+        </if>
+        <if test="isStorePortrait == true">
+            INNER JOIN store_info_extension sie on si.id=sie.id
+        </if>
+        UNION ALL
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        FROM store_info si
+        INNER JOIN `area` n ON si.city_id = n.id  AND n.level = 2 and si.store_type > 0
+        <if test="contractId != null and contractId != ''">
+            INNER JOIN contract_store cs ON si.id = cs.`store_id`
+            AND cs.`contract_id` = #{contractId}
+        </if>
+        <if test="isStorePortrait == true">
+            INNER JOIN store_info_extension sie on si.id=sie.id
+        </if>
+        UNION ALL
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+        FROM store_info si
+        INNER JOIN `area` n ON si.region_id = n.id  AND n.level = 3 and si.store_type > 0
+        <if test="contractId != null and contractId != ''">
+            INNER JOIN contract_store cs ON si.id = cs.`store_id`
+            AND cs.`contract_id` = #{contractId}
+        </if>
+        <if test="isStorePortrait == true">
+            INNER JOIN store_info_extension sie on si.id=sie.id
+        </if>
+    </select>
+
+    <select id="hasAvailableAdPosition" parameterType="string" resultType ="java.lang.Boolean">
+        SELECT
+        CASE WHEN ap.ad_count>si.used_count THEN  TRUE ELSE  FALSE END
+        from store_info si
+        INNER JOIN ad_position ap on si.store_type = ap.store_type AND  si.id = #{storeId}
+        LIMIT 1
+    </select>
+
+    <update id="increaseStoreUsedCount" parameterType="string">
+        UPDATE store_info SET used_count = used_count +1 WHERE id = #{storeId};
+    </update>
+
+    <update id="decreaseStoreUsedCount" parameterType="string">
+        UPDATE store_info SET used_count = used_count -1 WHERE id = #{storeId};
+    </update>
+
+    <update id="decreaseContractStoreUsedCount" parameterType="string">
+        UPDATE store_info si
+        INNER  JOIN  contract_store cs on si.id = cs.store_id AND cs.contract_id = #{contractId}
+        SET used_count = used_count -1;
+    </update>
+
+    <update id="recalculateContractStoreUsedCount" parameterType="string">
+        UPDATE store_info si
+        INNER  JOIN
+        (
+        SELECT cs.store_id ,COUNT(*) as count
+        FROM  contract_store cs
+        INNER  JOIN  contract c on cs.contract_id =c.id AND c.contract_status IN ( 1,2,3,4,7 )
+        WHERE cs.store_id in (SELECT cs.store_id  from contract_store  where contract_id = #{contractId})
+        GROUP BY  cs.store_id
+        ) t on si.id = t.store_id
+        SET used_count = t.count;
+    </update>
+
+    <select id="storeInfoUseCountStatistic" resultType="long">
+        SELECT
+        sum(si.is_using) useStoreCount
+        FROM store_info si
+        where deleted =0 AND si.store_type <![CDATA[ > ]]> 0
+    </select>
+
+    <select id="getUnsettledAreaInfo"  resultType="com.sztouyun.advertisingsystem.model.system.Area" parameterType="string">
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.region_id "/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+    
+    <select id="getAdvertisementAreaInfo" resultType="com.sztouyun.advertisingsystem.model.system.Area" parameterType="string">
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getAdvertisementAreaIdSubSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getAdvertisementAreaIdSubSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getAdvertisementAreaIdSubSQL">
+            <property name="areaIdName" value="si.region_id "/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+
+    <select id="getCheckedUnsettledAreaIds" parameterType="string" resultType="string">
+        SELECT DISTINCT   si.region_id  region_id
+        FROM period_store_profit_statistic psps
+        INNER JOIN  store_info si ON psps.store_id = si.id and psps.settled= false AND psps.settled_store_profit_id=#{settledStoreProfitId} AND psps.share_amount &gt; 0;
+    </select>
+
+
+    <select id="getUnsettledStoreProfitList" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.UnsettledPeriodStoreProfitListRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.StoreProfitBean">
+        SELECT
+        <include refid="selectProfitColumns">
+            <property name="settledStoreProfitId" value="#{id}" />
+        </include>
+        from period_store_profit_statistic psps
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        INNER JOIN store_info si on psps.store_id=si.id AND psps.settled=FALSE AND psps.share_amount &gt; 0
+        <if test="storeName != null and storeName != ''">
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != null and deviceId != ''">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != '' and shopId != null">
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        AND (
+            (1!=1)
+            <if test="areaIds.size() > 0">
+                OR  si.region_id in
+                <foreach collection="areaIds" index="index" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="hasAbnormalNode == true">
+                OR (si.province_id = '' || si.city_id = '' || si.region_id = '')
+            </if>
+        )
+        where ( psps.settled_store_profit_id= '' or ssp.settle_status = 0
+        or (psps.settled_store_profit_id = #{id} and ssp.settle_status = 2  )
+        )
+        GROUP BY psps.store_id
+        ORDER BY
+        shareAmount desc,settledMonth desc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getUnsettledStoreProfitListWithSettleMonth" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.UnsettledPeriodStoreProfitListRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.StoreProfitBean">
+        SELECT
+        <include refid="selectProfitColumnsWithSettleMonth">
+            <property name="settledStoreProfitId" value="#{id}" />
+        </include>
+        from period_store_profit_statistic psps
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        INNER JOIN store_info si on psps.store_id=si.id AND psps.settled=FALSE and psps.settled_month =#{settledMonth} AND psps.share_amount &gt; 0
+        <if test="storeName != null and storeName != ''">
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != null and deviceId != ''">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != '' and shopId != null">
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        AND (
+            (1!=1)
+            <if test="areaIds.size() > 0">
+                OR si.region_id in
+                <foreach collection="areaIds" index="index" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="hasAbnormalNode == true">
+                OR (si.province_id = '' || si.city_id = '' || si.region_id = '')
+            </if>
+        )
+        where ( psps.settled_store_profit_id= '' or ssp.settle_status = 0
+        or (psps.settled_store_profit_id = #{id} and ssp.settle_status = 2  )
+        )
+        ORDER BY
+        psps.share_amount desc,psps.settled_month desc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getUnsettledStoreProfitCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.UnsettledPeriodStoreProfitListRequest" resultType="java.lang.Long">
+        SELECT  count(DISTINCT psps.store_id ) from period_store_profit_statistic psps
+        INNER JOIN store_info si on psps.store_id=si.id and psps.settled=0
+        AND psps.share_amount &gt; 0
+        <if test="settledMonth != null">
+            AND psps.settled_month=#{settledMonth}
+        </if>
+        <if test="storeName != null and storeName != ''">
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != null and deviceId != ''">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != '' and shopId != null">
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        AND (
+            (1!=1)
+            <if test="areaIds.size() > 0">
+                OR si.region_id in
+                <foreach collection="areaIds" index="index" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="hasAbnormalNode == true">
+                OR (si.province_id = '' || si.city_id = '' || si.region_id = '')
+            </if>
+        )
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        where ( psps.settled_store_profit_id= '' or ( psps.settled_store_profit_id !='' and ssp.settle_status = 0 )
+        or (psps.settled_store_profit_id = #{id} and ssp.settle_status = 2  )
+        )
+    </select>
+
+    <sql id="selectProfitColumns">
+        psps.id id,
+        MAX(psps.settled_month) as maxSettledMonth,
+        MAX(psps.settled_month) as settledMonth,
+        MIN(psps.settled_month) as minSettledMonth,
+        sum(psps.share_amount) as  shareAmount ,
+        psps.settled,
+        si.store_no shopId,
+        si.id storeId,
+        si.device_id deviceId,
+        si.store_address storeAddress,
+        si.province_id provinceId,
+        si.city_id cityId,
+        si.store_name storeName,
+        si.region_id regionId,
+        CASE when psps.settled_store_profit_id !='' and psps.settled_store_profit_id = ${settledStoreProfitId} then true
+        else false end as checked,
+        CASE when count(psps.store_id) > 1 AND psps.share_amount &gt; 0  then TRUE
+        else FALSE end as multiRecords
+    </sql>
+    <sql id="selectProfitColumnsWithSettleMonth">
+        psps.id id,
+        psps.settled_month settledMonth,
+        psps.share_amount shareAmount ,
+        psps.settled,
+        si.store_no shopId,
+        si.id storeId,
+        si.device_id deviceId,
+        si.store_address storeAddress,
+        si.province_id provinceId,
+        si.city_id cityId,
+        si.store_name storeName,
+        si.region_id regionId,
+        CASE when psps.settled_store_profit_id !='' and psps.settled_store_profit_id = ${settledStoreProfitId} then true
+        else false end as checked,
+        FALSE as multiRecords
+    </sql>
+
+    <select id="getUnsettledStoreProfitAmount" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.UnsettledPeriodStoreProfitListRequest" resultType="java.lang.Double">
+        SELECT  sum(psps.share_amount ) from period_store_profit_statistic psps
+        INNER JOIN store_info si on psps.store_id=si.id and psps.settled=0 AND psps.share_amount>0
+        <if test="settledMonth != null">
+            AND psps.settled_month=#{settledMonth}
+        </if>
+        <if test="storeName != null and storeName != ''">
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != null and deviceId != ''">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != null and shopId != ''">
+            AND si.store_no like CONCAT('%', #{shopId}, '%')
+        </if>
+        AND (
+            (1!=1)
+            <if test="areaIds.size() > 0">
+                OR si.region_id in
+                <foreach collection="areaIds" index="index" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="hasAbnormalNode == true">
+                OR (si.province_id = '' || si.city_id = '' || si.region_id = '')
+            </if>
+        )
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        where ( psps.settled_store_profit_id= '' or ( psps.settled_store_profit_id !='' and ssp.settle_status = 0 )
+        or (psps.settled_store_profit_id = #{id} and ssp.settle_status = 2  )
+        )
+    </select>
+
+    <select id="updateUnsettledStoreProfit" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.UnsettledPeriodStoreProfitListRequest">
+        update period_store_profit_statistic psps
+        INNER JOIN store_info si on psps.store_id=si.id and psps.settled=0
+        AND psps.settled_month=#{settledMonth} AND psps.share_amount>0
+        <if test="storeName != null and storeName != ''">
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != null and deviceId != ''">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != null and shopId != ''">
+            AND si.store_no like CONCAT('%', #{shopId}, '%')
+        </if>
+        AND (
+            (1!=1)
+            <if test="areaIds.size() > 0">
+                OR si.region_id in
+                <foreach collection="areaIds" index="index" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="hasAbnormalNode == true">
+                OR (si.province_id = '' || si.city_id = '' || si.region_id = '')
+            </if>
+        )
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        set psps.settled_store_profit_id=#{id}
+        where ( psps.settled_store_profit_id= '' or ( psps.settled_store_profit_id !='' and ssp.settle_status = 0 )
+        or (psps.settled_store_profit_id = #{id} and ssp.settle_status = 2  )
+        )
+    </select>
+
+    <select id="getSubPeriodStoreProfitPageList" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SubPeriodStoreProfitListRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.StoreProfitBean">
+        SELECT
+        <include refid="selectProfitColumnsWithSettleMonth">
+            <property name="settledStoreProfitId" value="''" />
+        </include>
+        from period_store_profit_statistic psps
+        LEFT JOIN settled_store_profit ssp on psps.settled_store_profit_id=ssp.id
+        INNER JOIN store_info si on psps.store_id=si.id AND psps.settled=FALSE and psps.settled_month <![CDATA[ <= ]]>  #{settledMonth} AND psps.share_amount &gt; 0
+        AND psps.store_id=#{storeId}
+        AND psps.share_amount &gt; 0
+        where psps.settled_store_profit_id= '' or ssp.settle_status = 0
+        order by psps.settled_month desc,psps.id desc
+    </select>
+
+    <select id="getStoreIdByAdvertisement" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.CalculateProfitByAdvertisementPageRequest" resultType="string">
+        SELECT cs.`store_id` FROM contract_store cs INNER JOIN advertisement a ON a.contract_id = cs.`contract_id`  AND a.id IN
+        <foreach collection="calculateAdvertisementIds" index="index" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+        GROUP BY cs.`store_id`
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getStoreInfoByAdvertisement" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoByAdvertisementIdInfo" resultType="com.sztouyun.advertisingsystem.model.store.StoreInfo">
+        SELECT
+        si.`id`,
+        si.`city_id` AS cityId,
+        si.`created_at` AS created_at,
+        si.`created_time` AS createdTime,
+        si.`deleted`,
+        si.`device_id` deviceId,
+        si.`province_id` provinceId,
+        si.`region_id` regionId,
+        si.`store_address` storeAddress,
+        si.`store_name` storeName,
+        si.`store_no` storeNo,
+        si.`store_type` storeType,
+        si.`transaction_count` transactionCount,
+        si.`updated_time` updatedTime,
+        si.`used_count` usedCount,
+        si.`available`,
+        si.`store_source` storeSource
+        FROM store_info si INNER JOIN contract_store cs ON cs.`store_id` = si.`id` INNER JOIN advertisement a ON a.`contract_id` = cs.`contract_id` AND a.`advertisement_status` = 4
+        AND si.available is TRUE
+        AND a.id = #{advertisementId}
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getStoreInfoByCoordinate" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StorePlacementViewModel">
+        SELECT si.id, si.longitude, si.latitude
+        FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <if test="storeType != null and storeType != ''">
+            AND si.store_type = #{storeType}
+        </if>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+        <if test="provinceId != null and provinceId != ''">
+            AND si.province_id = #{provinceId}
+        </if>
+        <if test="cityId != null and cityId != ''">
+            AND si.city_id = #{cityId}
+        </if>
+        <if test="regionId != null and regionId != ''">
+            AND si.region_id = #{regionId}
+        </if>
+        <if test="contractId != null and contractId != ''">
+        LEFT JOIN contract_store cs on si.id =cs.store_id  AND  cs.contract_id = #{contractId}
+        WHERE ((ap.ad_count > si.used_count) || cs.id is not NULL)
+        </if>
+        <if test="customerStorePlanId != null and customerStorePlanId != ''">
+            LEFT JOIN customer_store_plan_detail cspd on cspd.store_id = si.id and cspd.customer_store_plan_id = #{customerStorePlanId}
+            where ((ap.ad_count > si.used_count) || cspd.id is not null)
+        </if>
+
+    </select>
+
+    <select id="getCustomerStoreArea" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStoreInfoAreaSelectedRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.system.AreaStoreInfo">
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getCustomerStoreAreaSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getCustomerStoreAreaSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.getCustomerStoreAreaSQL">
+            <property name="areaIdName" value="si.region_id"/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+
+    <select id="getCustomerStoreInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStoreInfoQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoQueryResult">
+        (SELECT si.id, si.store_name AS storeName, si.store_type, si.city_id cityId,si.store_address storeAddress, si.available,
+        CASE WHEN  cspd.id IS NULL THEN 0 ELSE  1 END  AS isChoose,
+        si.`region_id` AS regionId,
+        si.device_id AS deviceId,
+        null AS hasHeart,
+        null as isPaveGoods,
+        si.store_no AS shopId,
+        si.is_qualified
+        FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type
+        AND si.store_type >0 AND si.deleted = 0
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.areaIdConditionSQL"></include>
+        LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND  cspd.customer_store_plan_id = #{customerStorePlanId}
+        WHERE
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.customerStoreAvailableCondition"></include>
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            ORDER BY si.store_no ASC
+            LIMIT #{topCount}
+        </if>
+        )
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            UNION
+            (SELECT si.id, si.store_name AS storeName, si.store_type, si.city_id cityId,si.store_address storeAddress, si.available,
+            CASE WHEN  cspd.id IS NULL THEN 0 ELSE  1 END  AS isChoose,
+            si.`region_id` AS regionId,
+            si.device_id AS deviceId,
+            NULL AS hasHeart,
+            NULL as isPaveGoods,
+            si.store_no AS shopId,
+            si.is_qualified
+            FROM store_info si
+            INNER JOIN ad_position ap ON si.store_type = ap.store_type
+            AND si.store_type >0   AND si.deleted = 0
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+            LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND  cspd.customer_store_plan_id = #{customerStorePlanId}
+            WHERE
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.customerStoreAvailableCondition"></include>
+            ORDER BY si.store_no ASC
+            LIMIT #{topCount}
+            )
+        </if>
+        ORDER BY shopId ASC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="getCustomerStoreInfoCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStoreInfoQueryRequest" resultType="long">
+        select count(id) from (
+        select si.id from store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0
+        AND si.store_type >0
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.areaIdConditionSQL"></include>
+        LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND  cspd.customer_store_plan_id = #{customerStorePlanId}
+        WHERE
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.customerStoreAvailableCondition"></include>
+
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            UNION
+            select si.id from store_info si
+            INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0
+            AND si.store_type >0
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+            LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND  cspd.customer_store_plan_id = #{customerStorePlanId}
+            WHERE
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.customerStoreAvailableCondition"></include>
+          </if>
+        ) tmp
+    </select>
+
+
+    <select id="queryStoreInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.PrimaryStoreInfoRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.PrimaryStoreInfoViewModel">
+        SELECT
+            si.id AS id ,
+            si.store_name AS storeName,
+            si.store_address AS storeAddress,
+            <if test="contractId != null and contractId != ''">
+                EXISTS(select 1 from contract_store cs where cs.store_id = #{storeId} and cs.contract_id = #{contractId} limit 1) as checked,
+            </if>
+            <if test="customerStorePlanId != null and customerStorePlanId != ''">
+                EXISTS(select 1 from customer_store_plan_detail cspd where cspd.store_id = #{storeId} and cspd.customer_store_plan_id = #{customerStorePlanId} limit 1) as checked,
+            </if>
+            case WHEN IFNULL(si.outside_picture,'')= '' then  sie.outside_picture  else si.outside_picture end as outsidePicture,
+            case WHEN IFNULL(si.inside_picture, '')= '' then  sie.inside_picture  else si.inside_picture end as insidePicture,
+            sie.cash_register_picture AS cashRegisterPicture
+        FROM
+            store_info si
+        LEFT JOIN store_info_extension sie ON si.id=sie.id
+        WHERE si.id=#{storeId}
+    </select>
+    <select id="getCustomerStoreInfoByCoordinate" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStoreInfoQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStorePlacementViewModel">
+        SELECT si.id, si.longitude, si.latitude,
+        CASE when cspd.id is NULL THEN FALSE ELSE TRUE END  as isChoose
+        FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0 AND si.store_type >0
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+        <if test="provinceId != null and provinceId != ''">
+            AND si.province_id = #{provinceId}
+        </if>
+        <if test="cityId != null and cityId != ''">
+            AND si.city_id = #{cityId}
+        </if>
+        <if test="regionId != null and regionId != ''">
+            AND si.region_id = #{regionId}
+        </if>
+        LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND  cspd.customer_store_plan_id = #{customerStorePlanId}
+        WHERE ((ap.ad_count > si.used_count) || cspd.id is not NULL)
+    </select>
+
+    <select id="getAllAvailableStoreCount" resultType="java.lang.Long" parameterType="string">
+        select count(1) from store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0
+        AND si.store_type >0
+        LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id and cspd.customer_store_plan_id=#{customerStorePlanId}
+        where (ap.ad_count > si.used_count) or cspd.id is not NULL
+    </select>
+
+    <select id="getStoreCountInAbnormal" resultType="java.lang.Long" parameterType="string">
+        select count(1) from store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type AND si.deleted = 0
+        AND si.store_type >0
+        AND not (si.province_id !='' and si.city_id !='' and si.region_id !='')
+        LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id and cspd.customer_store_plan_id=#{customerStorePlanId}
+        where (ap.ad_count > si.used_count) or cspd.id is not NULL
+    </select>
+
+    <select id="getStoreInfoUsedCountStatisticByCity" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.StoreAreaStatisticRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoAreaStatistic">
+        select
+        <if test="cityId !=null and cityId !='' ">
+            si.region_id as areaId,
+        </if>
+        <if test="cityId == null or cityId ==''">
+            si.city_id  as areaId,
+        </if>
+        count(si.id) as storeCount,
+        SUM(si.is_using) as usedStoreCount
+        from store_info si
+            INNER JOIN ad_position ap on si.store_type =ap.store_type and si.deleted=0
+        <if test=" available== true">
+            and si.available is true and ap.ad_count > si.used_count
+        </if>
+        <if test=" available== false">
+            and not ( si.available is true and ap.ad_count > si.used_count )
+        </if>
+        <if test=" storeType !=null ">
+            and si.store_type = #{storeType}
+        </if>
+
+        <if test="cityId !=null and cityId !='' ">
+            where si.city_id =#{cityId}
+            group by si.region_id
+        </if>
+        <if test="cityId == null or cityId ==''">
+            group by si.city_id
+        </if>
+    </select>
+
+    <select id="getAdvertisementStatisticByStoreId" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementStoreInfoStatisticViewModel">
+        select
+          count(distinct a.id) totalCount,
+          sum(CASE WHEN EXISTS (SELECT 1 from advertisement_daily_delivery_monitor_statistic where store_id=#{id} and advertisement_id=a.id and display_times > 0 limit 1) then 1 else 0 end) activedCount
+        from contract_store cs
+        inner join advertisement a on cs.contract_id = a.contract_id  and cs.store_id=#{id} AND  a.advertisement_status in(4,5,6)
+    </select>
+
+    <update id="updateStoreIsUsing" parameterType="string">
+        UPDATE store_info si
+        INNER JOIN contract_store cs on cs.contract_id =#{contractId} AND cs.store_id = si.id
+        LEFT JOIN
+          (SELECT cs.store_id from contract_store cs INNER JOIN contract c on cs.contract_id = c.id and c.contract_status =7 GROUP BY cs.store_id) as t
+          on si.id = t.store_id
+        SET  si.is_using = (CASE WHEN t.store_id is NULL THEN 0 ELSE 1 END);
+    </update>
+
+    <select id="getStoreNameInfo" parameterType="list" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreNameInfo">
+        SELECT  id,store_name,store_no shopId from store_info  WHERE id in
+        <foreach collection="list" index="index" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+    </select>
+
+    <select id="getStoreNumStatisticsByNow" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreNumStatistics">
+        SELECT
+        COUNT(si.id) storeTotal,
+        IFNULL(SUM(CASE WHEN ap.ad_count = si.used_count THEN 1 ELSE 0 END), 0) fullStoreNum,
+        IFNULL(SUM(CASE WHEN si.used_count = 0 THEN 1 ELSE 0 END), 0) usedAdPositionEqualZeroStoreNum,
+        IFNULL(SUM(CASE WHEN si.used_count &gt; 0 AND si.used_count &lt; ap.ad_count * 0.5 THEN 1 ELSE 0 END), 0) usedAdPositionLessThanFiftyPercentStoreNum,
+        IFNULL(SUM(CASE WHEN si.used_count &gt;= ap.ad_count * 0.5 AND ap.ad_count != si.used_count THEN 1 ELSE 0 END), 0) usedAdPositionGreaterThanEqualFiftyPercentStoreNum
+        FROM store_info si
+        LEFT JOIN ad_position ap
+        ON si.store_type = ap.store_type
+        WHERE si.deleted = 0;
+    </select>
+
+    <select id="getStoreValidInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.StoreValidInfoRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreValidInfo">
+        SELECT  si.id storeId,si.store_no,0 as validType
+        from advertisement a
+        INNER JOIN contract_store cs  on a.contract_id=cs.contract_id and a.id=#{advertisementId}
+        INNER JOIN store_info si on cs.store_id =si.id
+        AND si.store_no in
+        <foreach collection="storeNos" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+    </select>
+
+    <select id="getAdvertisementStoreIds" resultType="string" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementSettlementSelectAllRequest">
+        select si.id from store_info si inner join contract_store cs on cs.store_id = si.id
+          inner join advertisement a on a.contract_id = cs.contract_id and a.id = #{advertisementId}
+        <include refid="advertisementStoreSubSQL" />
+    </select>
+
+    <sql id="advertisementStoreSubSQL">
+        <if test='storeName != null and storeName != "" '>
+            AND si.store_Name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test='deviceId != null and deviceId != "" '>
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test='shopId != null and shopId != ""'>
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        AND (
+        (1!=1)
+        <if test="regionIds.size() > 0">
+            OR  si.region_id in
+            <foreach collection="regionIds" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="hasAbnormalNode == true">
+            OR (si.province_id = '' || city_id = '' || region_id = '')
+        </if>
+        )
+    </sql>
+
+    
+    <select id="existStoreInAbnormal" parameterType="string" resultType="Boolean">
+        select 1 from contract_store cs inner join advertisement a on a.contract_id = cs.contract_id and a.id = #{advertisementId}
+            inner join store_info si on si.id = cs.store_id
+            and (si.region_id = '' || si.city_id = '' || si.province_id = '')
+            limit 1
+    </select>
+
+    <select id="getTotalStoreCount" resultType="long">
+        select count(si.id) from store_info si inner join ad_position ap on ap.store_type = si.store_type and si.deleted is false
+        <if test="storeType != null">
+           and si.store_type = #{storeType}
+        </if>
+            left join contract_store cs on cs.store_id = si.id
+        <if test="contractId != null and contractId != ''">
+            and cs.contract_id = #{contractId}
+        </if>
+            where ap.ad_count > si.used_count || cs.id is not null
+    </select>
+
+
+</mapper>

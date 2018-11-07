@@ -1,0 +1,8 @@
+package com.sztouyun.advertisingsystem.repository.monitor;
+
+import com.sztouyun.advertisingsystem.model.monitor.AdvertisementDailyDeliveryMonitorStatistic;
+import com.sztouyun.advertisingsystem.repository.BaseAutoKeyRepository;
+
+
+public interface AdvertisementDailyDeliveryMonitorStatisticRepository extends BaseAutoKeyRepository<AdvertisementDailyDeliveryMonitorStatistic> {
+}

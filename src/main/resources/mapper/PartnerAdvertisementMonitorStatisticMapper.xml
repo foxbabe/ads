@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.PartnerAdvertisementMonitorStatisticMapper">
+
+    <select id="getPartnerOrderStoreMonitorItems" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerOrderStoreMonitorRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerOrderStoreMonitorItem">
+        SELECT
+        (SELECT IFNULL(SUM(display_times),0) FROM order_daily_delivery_monitor_statistic oddms WHERE oddms.order_id = od.order_id AND oddms.store_id = si.id
+            <if test="startTime != null">
+                AND oddms.date &gt;= #{startTime}
+            </if>
+
+            <if test="endTime != null">
+                AND oddms.date &lt;= #{endTime}
+            </if>
+        ) AS displayTimes,
+        (SELECT date FROM order_daily_delivery_monitor_statistic oddms WHERE oddms.order_id = od.order_id AND oddms.store_id = si.id
+        <if test="startTime != null">
+            AND oddms.date &gt;= #{startTime}
+        </if>
+        <if test="startTime == null">
+            AND oddms.date &gt;= #{effectiveStartTime}
+        </if>
+        <if test="endTime != null">
+            AND oddms.date &lt;= #{endTime}
+        </if>
+        <if test="endTime == null">
+            AND oddms.date &lt;= #{effectiveEndTime}
+        </if>
+        ORDER BY updated_time DESC limit 1) AS updatedTime,
+            si.id storeId,
+            si.store_no storeNo,
+            si.store_name storeName,
+            si.province_id provinceId,
+            si.city_id cityId,
+            si.region_id regionId,
+            si.store_address storeAddress,
+            si.device_id deviceId,
+            <if test="available == 0">
+                IFNULL((
+                select 1 FROM store_daily_statistic sds WHERE available =1 AND sds.store_id = si.id
+                <if test="startTime != null">
+                  AND sds.date &gt;= #{ startTime}
+                </if>
+                <if test="endTime != null">
+                  AND sds.date &lt;= #{endTime}
+                </if>
+                limit 1
+                ), 0) as available,
+            </if>
+            <if test="available == 1">
+              TRUE as available,
+            </if>
+            <if test="available == 2">
+              FALSE as available,
+            </if>
+
+            <if test="status == 0">
+                IFNULL((
+                SELECT 1 FROM order_daily_delivery_monitor_statistic oddms WHERE oddms.order_id = od.order_id AND oddms.store_id = si.id AND display_times > 0
+                    <if test="startTime != null">
+                        AND oddms.date &gt;= #{startTime}
+                    </if>
+
+                    <if test="endTime != null">
+                        AND oddms.date &lt;= #{endTime}
+                    </if>
+                limit 1
+                ), 0) as active,
+            </if>
+            <if test="status == 1">
+                TRUE as active,
+            </if>
+            <if test="status == 2">
+                FALSE as active,
+            </if>
+            si.device_id deviceId
+            FROM
+            order_detail od
+            INNER JOIN order_detail_store ods ON ods.order_detail_id = od.id AND od.order_id = #{orderId}
+            INNER JOIN store_info si ON si.id = ods.store_id
+
+            <if test="provinceId != null and provinceId != ''">
+                AND si.province_id = #{provinceId}
+            </if>
+            <if test="cityId != null and cityId != ''">
+                AND si.city_id = #{cityId}
+            </if>
+            <if test="regionId != null and regionId != ''">
+                AND si.region_id = #{regionId}
+            </if>
+            <if test="storeName != null and storeName != ''">
+                AND si.store_name like CONCAT('%', #{storeName}, '%')
+            </if>
+            <if test="deviceId != null and deviceId != ''">
+                AND si.device_id like CONCAT('%', #{deviceId}, '%')
+            </if>
+            <if test="shopId != null and shopId != ''">
+                AND si.store_no like  CONCAT('%',#{shopId},'%')
+            </if>
+            <if test="storeSource != null">
+                AND si.store_source = #{storeSource}
+            </if>
+            INNER JOIN order_detail_date odd ON odd.order_detail_id = od.`id`
+            <if test="startTime != null">
+                AND odd.date &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND odd.date &lt;= #{endTime}
+            </if>
+            where 1 = 1
+                <if test="available != 0">
+                  AND EXISTS (
+                    select 1 from store_daily_statistic sds where sds.store_id = si.id
+                        <if test="available == 1">
+                            AND sds.available is true
+                        </if>
+                        <if test="available == 2">
+                            AND sds.available is false
+                        </if>
+                        <if test="startTime != null">
+                            AND sds.date &gt;= #{ startTime}
+                        </if>
+                        <if test="endTime != null">
+                            AND sds.date &lt;= #{endTime}
+                        </if>
+                    )
+                </if>
+                <if test="status != 0">
+                    AND EXISTS (
+                      SELECT 1 FROM order_daily_delivery_monitor_statistic oddms WHERE oddms.order_id = od.order_id AND oddms.store_id = si.id
+                        <if test="status == 1">
+                            AND oddms.display_times > 0
+                        </if>
+                        <if test="status == 2">
+                            AND oddms.display_times = 0
+                        </if>
+                        <if test="startTime != null">
+                            AND oddms.date &gt;= #{startTime}
+                        </if>
+                        <if test="endTime != null">
+                            AND oddms.date &lt;= #{endTime}
+                        </if>
+                    )
+                </if>
+            GROUP BY si.id
+            ORDER BY si.store_no ASC
+    </select>
+
+    <select id="getPartnerOrderStoreMonitorItemCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.PartnerOrderStoreMonitorRequest" resultType="long">
+      SELECT COUNT(*) FROM (
+        SELECT si.id
+        FROM order_detail od
+        INNER JOIN order_detail_store ods ON ods.order_detail_id = od.id AND od.order_id = #{orderId}
+        INNER JOIN store_info si ON si.id = ods.store_id
+        <if test="provinceId != null and provinceId != ''">
+            AND si.province_id = #{provinceId}
+        </if>
+        <if test="cityId != null and cityId != ''">
+            AND si.city_id = #{cityId}
+        </if>
+        <if test="regionId != null and regionId != ''">
+            AND si.region_id = #{regionId}
+        </if>
+        <if test="storeName != null and storeName != ''">
+            AND si.store_name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != null and deviceId != ''">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != null and shopId != ''">
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        <if test="storeSource != null">
+            AND si.store_source = #{storeSource}
+        </if>
+        <if test="available != null">
+            <if test="available == 1">
+                AND si.available IS TRUE
+            </if>
+            <if test="available == 2">
+                AND si.available IS FALSE
+            </if>
+        </if>
+        <if test="status != null">
+            <if test="status == 1">
+                AND si.display_times &gt; 0
+            </if>
+            <if test="status == 2">
+                AND si.display_times &lt;= 0
+            </if>
+        </if>
+        INNER JOIN order_detail_date odd ON odd.order_detail_id = od.`id`
+        <if test="startTime != null">
+            AND odd.date &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND odd.date &lt;= #{endTime}
+        </if>
+        where 1 = 1
+        <if test="available != 0">
+            AND EXISTS (
+            select 1 from store_daily_statistic sds where sds.store_id = si.id
+            <if test="available == 1">
+                AND sds.available is true
+            </if>
+            <if test="available == 2">
+                AND sds.available is false
+            </if>
+            <if test="startTime != null">
+                AND sds.date &gt;= #{ startTime}
+            </if>
+            <if test="endTime != null">
+                AND sds.date &lt;= #{endTime}
+            </if>
+            )
+        </if>
+        <if test="status != 0">
+            AND EXISTS (
+            SELECT 1 FROM order_daily_delivery_monitor_statistic oddms WHERE oddms.order_id = od.order_id AND oddms.store_id = si.id
+            <if test="status == 1">
+                AND oddms.display_times > 0
+            </if>
+            <if test="status == 2">
+                AND oddms.display_times = 0
+            </if>
+            <if test="startTime != null">
+                AND oddms.date &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND oddms.date &lt;= #{endTime}
+            </if>
+            )
+        </if>
+        GROUP BY si.id
+        ) tmp
+    </select>
+
+    <select id="getValidAreaInPartnerStoreMonitor" resultType="com.sztouyun.advertisingsystem.model.system.Area" parameterType="string">
+        <include refid="getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.province_id"/>
+            <property name="areaLevel" value="1"/>
+        </include>
+        UNION ALL
+        <include refid="getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.city_id"/>
+            <property name="areaLevel" value="2"/>
+        </include>
+        UNION ALL
+        <include refid="getAreaIdListSubSQL">
+            <property name="areaIdName" value="si.region_id "/>
+            <property name="areaLevel" value="3"/>
+        </include>
+    </select>
+
+    <sql id="getAreaIdListSubSQL">
+        SELECT DISTINCT n.id AS id, n.code AS CODE, n.name AS `name`, n.level AS `level`, n.parent_id AS parentId
+         FROM order_detail od INNER JOIN order_detail_store ods ON ods.order_detail_id = od.id AND od.order_id = #{orderId}
+        INNER JOIN store_info si ON si.id = ods.store_id
+        INNER JOIN `area` n ON ${areaIdName} = n.id AND n.level = ${areaLevel}
+    </sql>
+
+    <insert id="saveOrderDailyDeliveryLog"  parameterType="java.util.List">
+        <foreach collection="list" index="index" item="item"   open="" separator=";" close="">
+            INSERT INTO order_daily_delivery_monitor_statistic (`created_time`, `updated_time`, `date`, `display_times`, `order_id`, `order_material_id`, `store_id`)
+            VALUES(NOW(), NOW(), #{item.date}, #{item.displayTimes}, #{item.orderId}, #{item.orderMaterialId}, #{item.storeId})
+            ON DUPLICATE KEY UPDATE display_times = display_times + #{item.displayTimes}, updated_time = NOW()
+        </foreach>
+    </insert>
+
+    <update id="updateOrderDailyStoreActiveCountAndDisplayTimes" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.OrderDailyMonitorDto">
+        update order_daily_store_monitor_static odsms
+        INNER JOIN
+        (
+        SELECT
+        count(DISTINCT store_id) active_store_count,
+        `date`,
+        order_id,
+        IFNULL(sum(display_times),0) display_times
+        from
+        order_daily_delivery_monitor_statistic
+        where `date`=#{date}  AND
+        order_id in
+        <foreach collection="orderIds" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        group by order_id,`date`
+        ) availableInfo
+        on odsms.order_id=availableInfo.order_id and odsms.date=availableInfo.date and odsms.date=#{date}
+        AND
+        odsms.order_id in
+        <foreach collection="orderIds" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        set odsms.active_store_count=availableInfo.active_store_count,odsms.display_times=availableInfo.display_times
+    </update>
+
+    <update id="updatePartnerDeliveryMonitorInfo"  parameterType="java.util.List">
+        <foreach collection="list" index="index" item="item"   open="" separator=";" close="">
+            UPDATE `partner_advertisement_monitor_statistic` SET updated_time = NOW(), display_times =
+            (
+            SELECT IFNULL(SUM(display_times), 0) FROM `order_daily_delivery_monitor_statistic` WHERE order_id = #{item}
+            )
+            WHERE id = #{item}
+        </foreach>
+    </update>
+
+    <select id="getOrderAdvertisementInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementInfoModel" parameterType="string">
+        SELECT
+        om.id AS advertisementMaterialId,
+        om.terminal_type AS terminalType,
+        om.advertisement_position_type AS advertisementPositionType,
+        oi.id AS orderId,
+        oi.partner_id AS partnerId
+        FROM order_info oi INNER JOIN order_material om ON om.order_id = oi.id AND om.id = #{advertisementMaterialId}
+    </select>
+</mapper>

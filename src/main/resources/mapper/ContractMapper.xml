@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.ContractMapper">
+    <select id="getCitiesByContactId" parameterType="String" resultType="com.sztouyun.advertisingsystem.model.system.Area">
+        select
+       a.*
+        FROM
+        contract_store cs
+        INNER JOIN
+        store_info si
+        on cs.contract_id=#{contractId} and cs.store_id=si.id
+        INNER JOIN
+        area a on si.city_id=a.id
+        group by a.id
+    </select>
+
+    <delete id="clearDeletedContractStore" parameterType="String">
+        DELETE cs from contract_store cs
+        INNER JOIN  store_info ci on cs.store_id = ci.id and cs.contract_id=#{contractId} and ci.deleted = 1
+    </delete>
+
+    <delete id="deleteByContractId" parameterType="string">
+        DELETE cs from contract_store cs WHERE cs.contract_id=#{contractId}
+    </delete>
+
+    <insert id="addContractStoreByCustomerStorePlanId" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.CustomerStorePlanChooseRequest">
+        insert into contract_store(contract_id,store_id,store_type)
+        (SELECT
+            #{contractId} contract_id,
+            cspd.store_id store_id,
+            si.store_type store_type
+        from customer_store_plan_detail cspd
+        inner join store_info si on si.id=cspd.store_id and si.deleted = 0 and cspd.customer_store_plan_id=#{customerStorePlanId}
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type
+        where ap.ad_count > si.used_count)
+    </insert>
+
+    <select id="getAllCustomerStoreContractUseNum" resultType="com.sztouyun.advertisingsystem.model.contract.CustomerStoreContractUseNum">
+        SELECT customer_store_plan_id AS customerStorePlanId, COUNT(1) AS useNum FROM contract_extension GROUP BY customer_store_plan_id
+    </select>
+
+    <select id="getAreas" resultType="com.sztouyun.advertisingsystem.model.system.Area" parameterType="string">
+        SELECT DISTINCT a.id, a.`name`
+        FROM contract_store cs
+        INNER JOIN store_info si ON cs.store_id = si.id
+        INNER JOIN area a ON si.city_id = a.id
+        WHERE cs.contract_id = #{contractId}
+    </select>
+
+    <delete id="deleteByContractIdAndStoreType" parameterType="com.sztouyun.advertisingsystem.viewmodel.contract.ContractSelectedStoreInfo">
+        DELETE cs from contract_store cs WHERE cs.contract_id=#{contractId} and cs.store_type= #{storeType}
+    </delete>
+
+    <sql id="executed_contract_condition">
+        SELECT 1 FROM contract_operation_log col WHERE col.contract_id = c.id AND col.operation = 11 AND col.successed = 1 LIMIT 1
+    </sql>
+
+    <select id="getCustomerProfitRanking" resultType="com.sztouyun.advertisingsystem.viewmodel.customer.CustomerProfitRankingViewModel">
+        SELECT c.customer_id, cust.`name` customerName, IFNULL(SUM(c.total_cost),0) profit
+        FROM  contract c
+        INNER JOIN customer cust ON c.customer_id = cust.id
+        WHERE EXISTS ( <include refid="executed_contract_condition"/> )
+        GROUP BY c.customer_id
+        ORDER BY profit DESC, cust.customer_number ASC
+        LIMIT 20
+    </select>
+
+    <select id="getExecutedContractTotalProfit" resultType="java.lang.Double">
+        SELECT IFNULL(SUM(c.total_cost),0)
+        FROM contract c
+        WHERE EXISTS ( <include refid="executed_contract_condition"/> )
+    </select>
+
+    <select id="getCityProfitRanking" resultType="com.sztouyun.advertisingsystem.viewmodel.customer.CityProfitRankingViewModel">
+        SELECT cust.city_id, IFNULL(SUM(c.total_cost),0) profit
+        FROM contract c
+        INNER JOIN customer cust
+        ON c.customer_id = cust.id
+        AND EXISTS ( <include refid="executed_contract_condition"/> )
+        GROUP BY cust.city_id
+        ORDER BY profit DESC, cust.city_id ASC
+        LIMIT 10
+    </select>
+</mapper>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.OrderDailyStoreMonitorStaticMapper">
+    <insert id="createOrderDailyStoreMonitorStatic" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.OrderDateDto">
+        INSERT INTO
+          order_daily_store_monitor_static( `created_time`, `updated_time`,`delivery_store_count`, `active_store_count`, `available_store_count`, `date`, `order_id`, `display_times`)
+        SELECT
+            now() as created_time,
+            now() as updated_time ,
+            count(DISTINCT ods.store_id) as delivery_store_count,
+            0 as active_store_count,
+            CASE when odd.date &lt;= #{date} and si.available=1 then IFNULL(count(DISTINCT si.id), 0) else  0  end  as available_store_count,
+            odd.date,
+            od.order_id,
+            0 as display_times
+        from  order_detail od
+        INNER JOIN order_detail_date odd on od.id=odd.order_detail_id and od.order_id=#{orderId}
+        INNER JOIN order_detail_store ods on odd.order_detail_id=ods.order_detail_id
+        INNER JOIN store_info si on ods.store_id=si.id GROUP BY od.order_id ,odd.date;
+    </insert>
+
+    <update id="updateOrderDailyAvailableStoreMonitorStatic" parameterType="java.util.Date">
+        update order_daily_store_monitor_static odsms
+        INNER JOIN (
+                SELECT
+                        case si.available when 1 then IFNULL(count(DISTINCT si.id), 0) else  0  end  as available_store_count,
+                        odd.date,
+                        oi.id order_id
+                        from order_info  oi
+                        INNER JOIN order_detail od on oi.id=od.order_id and oi.order_status=3
+                        INNER JOIN order_detail_date odd on od.id=odd.order_detail_id  and odd.date=#{date}
+                        INNER JOIN order_detail_store ods on odd.order_detail_id=ods.order_detail_id
+                        INNER JOIN store_info si on ods.store_id=si.id GROUP BY oi.id ,odd.date
+      ) availableInfo
+          on odsms.order_id=availableInfo.order_id and odsms.date=availableInfo.date and odsms.date=#{date}
+      set odsms.available_store_count=availableInfo.available_store_count
+    </update>
+</mapper>

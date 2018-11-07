@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.AdvertisementMapper">
+
+    <sql id="authorizedQuerySql" >
+        <if test="authenticationSql != null and authenticationSql != ''">
+            AND ${authenticationSql}
+        </if>
+    </sql>
+
+    <select id="getAdvertisementMaterialPosition" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementMaterialPositionViewModel">
+    SELECT am.advertisement_id AS advertiementId, m.data AS url, capc.advertisement_position_type positionType FROM advertisement_material am INNER JOIN material m ON m.id = am.material_id
+        INNER JOIN contract_advertisement_position_config capc ON am.position_id = capc.id
+        and capc.`contract_id` = #{contractId} and capc.advertisement_position_type not in (4, 5)
+    </select>
+
+    <select id="getDeliveryAdvertisementStatistic" resultType="com.sztouyun.advertisingsystem.model.contract.DeliveryAdvertisementStatistic">
+        SELECT  contract_id AS contractId,count(id) AS deliveryCount FROM advertisement
+          WHERE advertisement_status IN (4, 6) OR (advertisement_status =5 and effective_start_time IS NOT NULL) GROUP BY contract_id
+    </select>
+
+
+    <select id="getAdvertisementsByStore" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.AdvertisementActivityInStoreRequest" resultType="com.sztouyun.advertisingsystem.model.advertisement.Advertisement">
+        SELECT
+            a.`id` AS id,
+            a.`created_time` AS createdTime,
+            a.`creator_id` AS creatorId,
+            a.`updated_time` AS updatedTime,
+            a.`advertisement_name` AS advertisementName,
+            a.`advertisement_period` AS advertisementPeriod,
+            a.`advertisement_status` AS advertisementStatus,
+            a.`advertisement_type` AS advertisementType,
+            a.`contract_id` AS contractId,
+            a.`customer_id` AS customerId,
+            a.`data` AS data,
+            a.`delivery_operator_id` AS deliveryOperatorId,
+            a.`effective_end_time` AS effectiveEndTime,
+            a.`effective_period` AS effectivePeriod,
+            a.`effective_start_time` AS effectiveStartTime,
+            a.`end_time` AS endTime,
+            a.`expected_due_day` AS expectedDueDay,
+            a.`remark` AS remark,
+            a.`start_time` AS startTime,
+            a.`enable_profit_share` AS enableProfitShare,
+            a.`profit_share_standard_amount` profitShareStandardAmount,
+            a.`profit_share_standard_amount_unit` profitShareStandardAmountUnit
+         FROM advertisement a INNER JOIN contract_store cs ON a.contract_id = cs.contract_id AND cs.store_id = #{storeId}
+          AND ((a.`advertisement_status` = 4 AND a.effective_start_time <![CDATA[ < ]]> #{effectiveEndDate} ) OR (a.`advertisement_status` IN (5, 6) AND a.`effective_end_time` >= #{effectiveStartDate} AND a.effective_start_time <![CDATA[ < ]]> #{effectiveEndDate} ))
+    </select>
+
+    <select id="getAdvertisementTaskList" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskViewModel">
+        SELECT
+            a.id id,
+            a.advertisement_name advertisementName,
+            a.advertisement_type advertisementType,
+            a.advertisement_status advertisementStatus,
+            a.effective_start_time startTime,
+            (SELECT count(cs.store_id) FROM  contract contract INNER JOIN contract_store cs on contract.id=cs.contract_id where  contract.id=a.contract_id) storeCount,
+            a.enable_profit_share enableProfitShare,
+            a.customer_id customerId,
+            ifnull((SELECT count(t.id) from task t where t.task_type=1 and t.task_sub_type=2 AND t.object_id=a.id),0) taskCount,
+            ifnull((SELECT count(t.id) from task t where t.task_type=1 and t.task_sub_type=2 AND t.object_id=a.id AND t.task_status in (3, 4)),0) finishedTaskCount,
+            ifnull((SELECT max(t.updated_time)  from task t where t.task_type=1 and t.task_sub_type=2 AND t.object_id=a.id),a.updated_time) updatedTime,
+            c.owner_id ownerId
+        FROM
+            advertisement a
+        INNER JOIN contract c on a.contract_id=c.id AND a.advertisement_status in (4,5,6)
+        <if test="advertisementName != '' and advertisementName != null">
+            AND a.advertisement_name like CONCAT('%', #{advertisementName}, '%')
+        </if>
+        <if test="advertisementStatus != null">
+            AND a.advertisement_status = #{advertisementStatus}
+        </if>
+        <if test="startTime != null">
+            AND a.effective_start_time <![CDATA[ >= ]]> #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND a.effective_start_time <![CDATA[ <= ]]> #{endTime}
+        </if>
+        <include refid="authorizedQuerySql"></include>
+        <if test="nickname != '' and nickname != null">
+            INNER JOIN user u on u.id=c.owner_id
+            AND u.nickname like CONCAT('%', #{nickname}, '%')
+        </if>
+        <if test="abnormal == true">
+            AND exists (select 1 from task t where t.task_type=1 and t.task_sub_type=2 and t.object_id =a.id limit 1)
+        </if>
+        <if test="abnormal == false">
+            AND not exists (select 1 from task t where t.task_type=1 and t.task_sub_type=2 and t.object_id =a.id limit 1)
+        </if>
+        order by updatedTime desc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getAdvertisementTaskListCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskRequest" resultType="long">
+        SELECT
+          count(a.id)
+        FROM
+        advertisement a
+        INNER JOIN contract c on a.contract_id=c.id and a.advertisement_status in (4,5,6)
+        <if test="advertisementName != '' and advertisementName != null">
+            AND a.advertisement_name like CONCAT('%', #{advertisementName}, '%')
+        </if>
+        <if test="advertisementStatus != null">
+            AND a.advertisement_status = #{advertisementStatus}
+        </if>
+        <if test="startTime != null">
+            AND a.effective_start_time <![CDATA[ >= ]]> #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND a.effective_start_time <![CDATA[ <= ]]> #{endTime}
+        </if>
+        <include refid="authorizedQuerySql"></include>
+        <if test="nickname != '' and nickname != null">
+            INNER JOIN user u on u.id=c.owner_id
+            AND u.nickname like CONCAT('%', #{nickname}, '%')
+        </if>
+        <if test="abnormal == true">
+            AND exists (select 1 from task t where t.task_type=1 and t.task_sub_type=2 and t.object_id =a.id limit 1)
+        </if>
+        <if test="abnormal == false">
+            AND not exists (select 1 from task t where t.task_type=1 and t.task_sub_type=2 and t.object_id =a.id limit 1)
+        </if>
+    </select>
+
+    <select id="getAdvertisementTaskStatusStatistics" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskCountStatisticInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskStatusStatisticsRequest">
+        SELECT
+            ifnull(count(a.id),0) totalCount,
+            ifnull(sum(case when EXISTS (SELECT 1 from task t where t.object_id = a.id limit 1) then 1 else 0 END),0) abnormalCount
+        FROM
+        advertisement a
+        INNER JOIN contract c on a.contract_id=c.id and a.advertisement_status in (4,5,6)
+        <if test="advertisementName != '' and advertisementName != null">
+            AND a.advertisement_name like CONCAT('%', #{advertisementName}, '%')
+        </if>
+        <if test="advertisementStatus != null">
+            AND a.advertisement_status = #{advertisementStatus}
+        </if>
+        <if test="startTime != null">
+            AND a.effective_start_time <![CDATA[ >= ]]> #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND a.effective_start_time <![CDATA[ <= ]]> #{endTime}
+        </if>
+        <include refid="authorizedQuerySql"></include>
+        <if test="nickname != '' and nickname != null">
+            INNER JOIN user u on u.id=c.owner_id
+            AND u.nickname like CONCAT('%', #{nickname}, '%')
+        </if>
+    </select>
+
+    <select id="getAdvertisementTaskDetail" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskDetailViewModel" parameterType="string">
+        SELECT
+            a.created_time createdTime,
+            ifnull((SELECT max(t.updated_time)  from task t where t.task_type=1 and t.task_sub_type=2 AND t.object_id=a.id),a.updated_time) updatedTime,
+            a.creator_id creatorId,
+            a.advertisement_name advertisementName,
+            a.advertisement_type advertisementType,
+            a.advertisement_status advertisementStatus,
+            a.effective_start_time startTime,
+            a.effective_end_time endTime,
+           (SELECT count(cs.store_id) FROM contract contract INNER JOIN contract_store cs on contract.id=cs.contract_id where  contract.id=a.contract_id ) storeCount,
+            a.enable_profit_share enableProfitShare,
+            a.customer_id customerId,
+            ifnull((SELECT count(t.id) from task t where t.task_type=1 AND t.task_sub_type=2 AND t.object_id = #{advertisementId}),0) taskCount,
+            (SELECT c.owner_id ownerId FROM contract c where a.contract_id=c.id) ownerId,
+            (SELECT cu.head_portrait portrait FROM customer cu where cu.id=a.customer_id) portrait
+        FROM
+            advertisement a
+        where a.id=#{advertisementId}
+    </select>
+
+    <select id="getAdvertisementTaskDetailList" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskDetailListRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskDetailListViewModel">
+        SELECT
+            t.task_status taskStatus,
+            t.task_result taskResult,
+            t.begin_time beginTime,
+            t.end_time endTime,
+            t.code code,
+            si.store_name storeName,
+            si.store_no shopId,
+            t.id id,
+            t.task_category taskCategory,
+            t.updated_time updatedTime,
+            t.owner_phone ownerPhone,
+            t.owner_name ownerName,
+            t.expected_completion_time expectedCompletionTime,
+            t.expected_completion_unit expectedCompletionUnit
+        FROM task t
+        INNER JOIN store_info si on t.sub_object_id=si.id AND t.object_id=#{advertisementId}
+        <if test="code != '' and code != null">
+            AND t.code like CONCAT('%', #{code}, '%')
+        </if>
+        <if test="storeName != '' and storeName != null">
+            AND si.store_name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="shopId != '' and shopId != null">
+            AND si.store_no like CONCAT('%', #{shopId}, '%')
+        </if>
+        <if test="taskStatus != null">
+            AND t.task_status = #{taskStatus}
+        </if>
+        <if test="taskResult != null">
+            AND t.task_result = #{taskResult}
+        </if>
+        <if test="taskCategory != null">
+            AND t.task_category = #{taskCategory}
+        </if>
+        <if test="beginTime != null">
+            AND t.begin_time <![CDATA[ >= ]]> #{beginTime}
+        </if>
+        <if test="endTime != null">
+            AND t.end_time <![CDATA[ <= ]]> #{endTime}
+        </if>
+        order by updatedTime desc
+        LIMIT #{start}, #{pageSize}
+    </select>
+    <select id="getAdvertisementTaskDetailListCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementTaskDetailListRequest" resultType="long">
+        SELECT
+            count(t.id)
+        FROM task t
+        INNER JOIN store_info si on t.sub_object_id=si.id AND t.object_id=#{advertisementId}
+        <if test="code != '' and code != null">
+            AND t.code like CONCAT('%', #{code}, '%')
+        </if>
+        <if test="storeName != '' and storeName != null">
+            AND si.store_name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="shopId != '' and shopId != null">
+            AND si.store_no like CONCAT('%', #{shopId}, '%')
+        </if>
+        <if test="taskStatus != null">
+            AND t.task_status = #{taskStatus}
+        </if>
+        <if test="taskResult != null">
+            AND t.task_result = #{taskResult}
+        </if>
+        <if test="taskCategory != null">
+            AND t.task_category = #{taskCategory}
+        </if>
+        <if test="beginTime != null">
+            AND t.begin_time <![CDATA[ >= ]]> #{beginTime}
+        </if>
+        <if test="endTime != null">
+            AND t.end_time <![CDATA[ <= ]]> #{endTime}
+        </if>
+    </select>
+
+    <select id="getStoreTaskDetail" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.StoreTaskDetailViewModel" parameterType="string">
+        SELECT
+            t.`code` code,
+            t.updated_time updatedTime,
+            t.created_time createdTime,
+            t.begin_time beginTime,
+            t.end_time endTime,
+            t.expected_completion_time expectedCompletionTime,
+            t.expected_completion_unit expectedCompletionUnit,
+            t.task_status taskStatus,
+            t.task_result taskResult,
+            t.task_category taskCategory,
+            si.store_name storeName,
+            si.store_no shopId,
+            si.device_id deviceId,
+            si.province_id provinceId,
+            si.city_id cityId,
+            si.region_id regionId,
+            si.store_address storeAddress,
+            si.available available,
+            si.deleted deleted,
+            t.owner_name ownerName,
+            t.owner_phone ownerPhone,
+            ifnull(t.remark,'') remark,
+            t.`name` name
+        from
+          task t
+        INNER JOIN store_info si
+        on t.sub_object_id=si.id and t.id=#{taskId}
+    </select>
+
+    <select id="getTotalStoreCount" resultType="long">
+        SELECT COUNT(cs.store_id) FROM advertisement a INNER JOIN contract_store cs ON cs.`contract_id` = a.`contract_id`
+        INNER JOIN  store_info si on si.id = cs.store_id
+        AND a.id = #{advertisementId}
+    </select>
+
+   <select id="getStoreAdvertisements" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementStoreInfoRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.StoreAdvertisementInfo">
+        SELECT
+        ad.id,
+        ad.advertisement_name as advertisementName,
+        c.contract_name as contractName,
+        c.id as contractId,
+        ad.customer_id as customerId,
+        ad.advertisement_type as advertisementType,
+        ad.enable_profit_share as enableProfitShare,
+        ad.advertisement_status as advertisementStatus,
+        <include refid="isAdvertisementActive"/> as active,
+        ad.updated_time as updatedTime,
+        ad.creator_id as creatorId,
+        c.owner_id as ownerId
+        FROM advertisement ad
+        LEFT JOIN contract c ON ad.contract_id = c.id
+        WHERE
+        <include refid="storeAdvertisementCondition"/>
+        ORDER BY ad.updated_time DESC limit #{start}, #{offset}
+   </select>
+
+    <select id="getStoreAdvertisementCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementStoreInfoRequest" resultType="java.lang.Long">
+        select
+        count(ad.id)
+        from advertisement ad
+        LEFT join contract c on ad.contract_id =c.id
+        where
+        <include refid="storeAdvertisementCondition"/>
+    </select>
+
+    <sql id="storeAdvertisementCondition">
+        exists (select 1 from contract_store cs  where cs.store_id = #{id} and cs.contract_id=ad.contract_id limit 1 )
+        AND  ad.advertisement_status in
+        <foreach collection="statusTypes" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        <if test="advertisementType != null">
+            AND ad.advertisement_type = #{advertisementType}
+        </if>
+        <if test="active == true">
+            AND <include refid="isAdvertisementActive"/>
+        </if>
+        <if test="active == false">
+            AND NOT <include refid="isAdvertisementActive"/>
+        </if>
+        <if test="enableProfitShare != null">
+            AND ad.enable_profit_share = #{enableProfitShare}
+        </if>
+        <if test="advertisementName != null">
+            AND ad.advertisement_name LIKE CONCAT('%',#{advertisementName},'%')
+        </if>
+        <if test="contractName != null">
+            AND c.contract_name LIKE CONCAT('%',#{contractName},'%')
+        </if>
+    </sql>
+
+    <sql id="isAdvertisementActive">
+        EXISTS (SELECT 1 from advertisement_daily_delivery_monitor_statistic  where advertisement_id=ad.id AND store_id=#{id} limit 1)
+    </sql>
+    
+    
+    <select id="getDeliveryAdvertisement" resultType="com.sztouyun.advertisingsystem.model.advertisement.Advertisement" parameterType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AutoFinishAdvertisementInfo">
+        SELECT
+          `id`,
+          `created_time`,
+          `creator_id`,
+          `updated_time`,
+          `advertisement_name`,
+          `advertisement_period`,
+          `advertisement_status`,
+          `advertisement_type`,
+          `contract_id`,
+          `customer_id`,
+          `data`,
+          `delivery_operator_id`,
+          `effective_end_time`,
+          `effective_period`,
+          `effective_start_time`,
+          `end_time`,
+          `expected_due_day`,
+          `remark`,
+          `start_time`,
+          `enable_profit_share`,
+          `profit_share_standard_amount`,
+          `profit_share_standard_amount_unit`
+        FROM
+        advertisement a where a.advertisement_status = #{advertisementStatus} and DATE_ADD(a.effective_start_time,INTERVAL a.advertisement_period DAY) &lt;= #{date}
+    </select>
+
+
+    <update id="updateAdvertisementShareAmount">
+        <foreach collection="list" index="index" item="item" separator=";">
+            UPDATE advertisement SET  share_amount = share_amount + #{item.shareAmount} where id = #{item.id}
+        </foreach>
+    </update>
+
+    <update id="updateSettlementInfo" parameterType="string">
+        update advertisement a
+        inner join advertisement_settlement ase
+        on a.id=ase.advertisement_id
+        <choose>
+            <when test="advertisementProfitMode == 1">
+                set a.share_amount = a.share_amount+ase.share_amount,
+                a.settled_amount = a.settled_amount+ase.share_amount,
+                ase.settled_user= #{settledUserId},
+                ase.settled_time = now(),
+                ase.updated_time = now(),
+                ase.settled = 1
+            </when>
+            <otherwise>
+                set
+                a.settled_amount = a.settled_amount+ase.share_amount,
+                ase.settled_user= #{settledUserId},
+                ase.settled_time = now(),
+                ase.updated_time = now(),
+                ase.settled = 1
+            </otherwise>
+        </choose>
+        where ase.id = #{advertisementSettlementId}
+    </update>
+</mapper>

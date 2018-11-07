@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.AdvertisementProfitStatisticMapper">
+
+    <update id="supplementAdvertisementProfitStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementaryProfitShareRequest">
+        update advertisement_profit_statistic aps inner join store_profit_statistic sps on sps.id = aps.store_profit_statistic_id and sps.settled is false
+            and sps.is_qualified is true and aps.enable_profit_share is true and aps.actived is false
+            and aps.profit_date = #{profitDate} and aps.store_id in
+                <foreach collection="storeIds" index="index" item="item" open="(" separator="," close=")">
+                   #{item}
+               </foreach>
+            set aps.share_amount = (select `value` from advertisement_profit_share_config where type = 4 and created_time &lt;= #{profitDate} and updated_time > #{profitDate}),
+            aps.is_qualified = true
+    </update>
+
+    <update id="updateAdvertisementActive" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.AdvertisementActiveUpdateRequest">
+        UPDATE `advertisement_profit_statistic` SET actived = TRUE WHERE advertisement_id = #{advertisementId} AND profit_date = #{profitDate}
+             AND store_id IN
+                <foreach collection="storeIds" item="item" index="index" open="(" close=")" separator=",">
+                    #{item}
+                </foreach>
+    </update>
+
+    <update id="updateAdvertisementProfit" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.AdvertisementProfitSettledInfo">
+        UPDATE advertisement_profit ap INNER JOIN (
+          SELECT advertisement_id id, IFNULL(sum(aps.share_amount*100)/100, 0) share_amount from advertisement_profit_statistic aps
+              INNER JOIN  period_store_profit_statistic psp on aps.store_id = psp.store_id and psp.share_amount>0 and settled_month = #{startDate} AND psp.settled_store_profit_id = #{id}
+          AND profit_date >= #{startDate} AND profit_date &lt; #{endDate} group by aps.advertisement_id) temp
+        on temp.id=ap.id
+        SET ap.settled_amount=(ap.settled_amount*100+temp.share_amount*100)/100,ap.unsettled_amount=(ap.unsettled_amount*100-temp.share_amount*100)/100
+    </update>
+
+    <update id="updateStoreAdvertisementProfit" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.AdvertisementProfitSettledInfo">
+        UPDATE advertisement_store_profit_period_statistic asdp
+            INNER JOIN(
+          SELECT aps.store_id, advertisement_id,IFNULL(sum(aps.share_amount*100)/100, 0) share_amount from advertisement_profit_statistic aps
+              INNER JOIN  period_store_profit_statistic psp on aps.store_id = psp.store_id and psp.share_amount>0 and settled_month = #{startDate} AND psp.settled_store_profit_id = #{id}
+          AND profit_date >= #{startDate} AND profit_date &lt; #{endDate} group by aps.store_id,aps.advertisement_id) temp
+                on asdp.advertisement_id=temp.advertisement_id AND  asdp.store_id = temp.store_id AND asdp.settled_month=#{startDate}
+        SET  asdp.settled_amount = (asdp.settled_amount*100+temp.share_amount*100)/100
+    </update>
+
+    <update id="updateAdvertisementProfitShareAmount" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.PeriodStoreProfitShareCalculateViewModel">
+        UPDATE advertisement_profit ap INNER JOIN (
+          SELECT advertisement_id as id,sum(aps.share_amount*100)/100 share_amount from advertisement_profit_statistic aps
+              INNER JOIN  period_store_profit_statistic psp on aps.store_id = psp.store_id and psp.share_amount>0 and settled_month = #{startDate}
+          AND profit_date >= #{startDate} AND profit_date &lt; #{endDate}
+            and aps.store_id in
+            <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+                #{item}
+            </foreach>
+          group by aps.advertisement_id) temp
+        on temp.id=ap.id
+        set ap.share_amount=(ap.share_amount*100+temp.share_amount*100)/100,ap.unsettled_amount=(ap.unsettled_amount*100+temp.share_amount*100)/100
+    </update>
+
+    <insert id="updateAdvertisementStoreProfitShareAmount" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.PeriodStoreProfitShareCalculateViewModel">
+        INSERT  INTO advertisement_store_profit_period_statistic (advertisement_id,store_id,settled_month,share_amount,settled_amount,created_time,updated_time)
+        SELECT
+            advertisement_id,
+            store_id,
+            #{startDate},
+            share_amount,
+            0,
+            now(),
+            now()
+        from
+          (
+            SELECT  aps.advertisement_id,psp.store_id,case when psp.share_amount>0 then ifnull(sum(aps.share_amount*100)/100,0)  else 0 END as share_amount
+            FROM advertisement_profit_statistic aps
+            INNER JOIN  period_store_profit_statistic psp on
+            aps.store_id = psp.store_id and psp.settled_month = #{startDate} and  aps.profit_date >= #{startDate} AND aps.profit_date &lt; #{endDate}
+            and aps.store_id in
+            <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+                #{item}
+            </foreach>
+            GROUP BY  aps.store_id,aps.advertisement_id) as t;
+    </insert>
+
+    <select id="getSettledDetailAdvertisementStatistic" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SettledDetailAdvertisementStatisticViewModel">
+        SELECT
+            sum(aps.share_amount*100)/100 settledAmount,
+            a.advertisement_name advertisementName,
+            a.advertisement_status advertisementStatus,
+            (SELECT ssp.settled_amount from settled_store_profit ssp where ssp.id=#{settledStoreProfitId}) totalSettledAmount,
+            a.profit_share_standard_amount shareStandard,
+            a.profit_share_standard_amount_unit shareStandardUnit
+        from period_store_profit_statistic paps
+        inner join store_profit_statistic sps on paps.id=sps.period_store_profit_statistic_id and paps.share_amount>0 and sps.share_amount>0 and paps.settled_store_profit_id = #{settledStoreProfitId}
+        inner JOIN advertisement_profit_statistic aps on aps.store_profit_statistic_id=sps.id and aps.share_amount>0
+        INNER JOIN advertisement a on a.id=aps.advertisement_id
+        group by aps.advertisement_id
+    </select>
+
+
+    <update id="supplementAdvertisementProfitQualifiedInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.SupplementProfitInfo">
+        UPDATE advertisement_profit_statistic aps
+        INNER JOIN advertisement a ON a.id = aps.advertisement_id AND a.enable_profit_share IS TRUE
+        AND aps.is_qualified IS FALSE
+        AND aps.actived IS TRUE
+        AND aps.profit_date &gt;= #{startDate}
+        AND aps.profit_date &lt;= #{endDate}
+        INNER JOIN store_profit_statistic sps ON sps.id = aps.store_profit_statistic_id AND sps.is_qualified IS TRUE
+        and sps.store_id in
+        <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+            #{item}
+        </foreach>
+        SET aps.share_amount = a.profit_share_standard_amount, aps.is_qualified = TRUE, aps.updated_time = #{updatedTime}
+    </update>
+    
+</mapper>

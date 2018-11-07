@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.TaskMapper">
+    <update id="acceptTasks" parameterType="com.sztouyun.advertisingsystem.viewmodel.internal.task.AcceptTasksRequest">
+        UPDATE  task SET owner_name=#{ownerName},owner_phone=#{ownerPhone},task_status=2,begin_time=now(),updated_time=now() WHERE id in
+        <foreach collection="taskIds" index="index" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+        and task_status=1;
+    </update>
+
+    <delete id="deleteAdvertisementTaskByTime" parameterType="com.sztouyun.advertisingsystem.viewmodel.mock.task.MockAdvertisementTaskViewModel">
+        DELETE FROM task WHERE object_id = #{advertisementId} AND task_type = 1 AND task_sub_type = 1 AND created_time &gt;= #{startTime} AND created_time &lt; #{endTime}
+    </delete>
+
+    <select id="getTaskIds" parameterType="com.sztouyun.advertisingsystem.viewmodel.internal.task.BaseTasksRequest" resultType="string">
+        SELECT t.id from task t
+        <if test="storeSource != null">
+            INNER JOIN store_info si
+            on si.id=t.sub_object_id and si.store_source=#{storeSource}
+        </if>
+        where t.task_status=1 and t.task_type=#{taskType}
+        <if test="taskSubType !=null">
+           and  t.task_sub_type=#{taskSubType}
+        </if>
+        and t.created_time >= #{startTime}
+        and t.created_time <![CDATA[ <= ]]>  #{endTime}
+        order by t.priority desc,t.created_time asc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getTaskAmount" parameterType="com.sztouyun.advertisingsystem.viewmodel.internal.task.BaseTasksRequest" resultType="java.lang.Long">
+        SELECT count(t.id) from task t
+        <if test="storeSource != null">
+            INNER JOIN store_info si
+            on si.id=t.sub_object_id and si.store_source=#{storeSource}
+        </if>
+        where t.task_status=1 and t.task_type=#{taskType}
+        <if test="taskSubType !=null">
+            and  t.task_sub_type=#{taskSubType}
+        </if>
+        and t.created_time >= #{startTime}
+        and t.created_time <![CDATA[ < ]]>  #{endTime}
+    </select>
+
+    <select id="getTaskStoreInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.internal.task.BaseTasksRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.task.TaskStoreInfo">
+        SELECT t.id ,si.store_no as storeNo,si.store_name as storeName from task t
+        INNER JOIN store_info si
+        on si.id=t.sub_object_id and si.store_source=#{storeSource}
+        where t.task_status=1 and t.task_type=1
+        and  t.task_sub_type=2
+        and t.created_time >= #{startTime}
+        and t.created_time <![CDATA[ < ]]>  #{endTime}
+        order by t.created_time asc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="cancelTaskByAdvertisement" parameterType="com.sztouyun.advertisingsystem.viewmodel.task.CancelAdvertisementTaskInfo">
+        update task set task_status = #{taskStatus}, task_result = #{taskResult}, end_time = now(),remark = #{remark}, updated_time = now()  where object_id = #{advertisementId} and task_type=1 and task_sub_type=2 and task_status not in (3, 4)
+        <if test="storeId != null and storeId != ''">
+            and sub_object_id = #{storeId}
+        </if>
+        ;
+    </select>
+
+    <select id="cancelTaskByDeletedStore">
+        update task t inner join store_info si on si.id = t.sub_object_id and task_sub_type = 2 and task_type = 1 and task_status not in (3, 4) and si.deleted is true
+            set t.task_status = 4, t.task_result = 1, t.end_time = now(), t.updated_time = now(),
+                t.remark = concat("门店名称为“",si.store_name, "”的门店，门店数据在系统已删除，当前门店下，所有未完成的任务，均自动取消")
+    </select>
+</mapper>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ehcache>
+    <diskStore path="java.io.tmpdir/Tmp_EhCache"/>
+    <defaultCache eternal="false" maxElementsInMemory="100000" overflowToDisk="false" diskPersistent="false"
+                  timeToIdleSeconds="900" timeToLiveSeconds="1800" memoryStoreEvictionPolicy="LRU"/>
+
+    <cache name="areas" maxEntriesLocalHeap="20000" timeToLiveSeconds="18000"/>
+    <cache name="users" maxEntriesLocalHeap="200" timeToLiveSeconds="18000"/>
+    <cache name="roles" maxEntriesLocalHeap="200" timeToLiveSeconds="18000"/>
+    <cache name="permissions" maxEntriesLocalHeap="3000" timeToLiveSeconds="18000"/>
+    <cache name="customers" maxEntriesLocalHeap="3000" timeToLiveSeconds="18000"/>
+    <cache name="partners" maxEntriesLocalHeap="20000" timeToLiveSeconds="360000"/>
+    <cache name="historicalParamConfig" maxEntriesLocalHeap="200" timeToLiveSeconds="18000"/>
+    <cache name="auditReasonConfigs" maxEntriesLocalHeap="200" timeToLiveSeconds="18000"/>
+    <cache name="AdvertisementInfo" maxEntriesLocalHeap="3000" timeToLiveSeconds="36000"/>
+    <cache name="OrderDeliveryInfo" maxEntriesLocalHeap="3000" timeToLiveSeconds="36000"/>
+    <cache name="advertisements" maxEntriesLocalHeap="200" timeToLiveSeconds="3600"/>
+    <cache name="stores" maxEntriesLocalHeap="20000" timeToLiveSeconds="360000"/>
+    <cache name="advertisementPositionConfigs" maxEntriesLocalHeap="20000" timeToLiveSeconds="3600"/>
+</ehcache>

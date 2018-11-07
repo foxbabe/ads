@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.CommodityMapper">
+
+    <select id="queryCommodityOptionInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityOptionRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityOptionViewModel">
+        SELECT
+            c.name commodityName,
+            c.id commodityId,
+            c.commodity_type_id commodityTypeId,
+            c.supplier_id supplierId,
+            ct.name commodityTypeName,
+            s.name supplierName
+        FROM
+            commodity c
+        INNER JOIN commodity_type ct ON c.commodity_type_id = ct.id
+        <if test="commodityName != '' and commodityName != null">
+            AND c.name like  CONCAT('%',#{commodityName},'%')
+        </if>
+        INNER JOIN supplier s ON c.supplier_id = s.id
+        <if test="commodityOptionInfos != null">
+            AND
+            <foreach collection="commodityOptionInfos" index="index" item="item" open="(" close=")" separator="or" >
+                (s.id = #{item.supplierId}  AND ct.id = #{item.commodityTypeId})
+            </foreach>
+        </if>
+        ORDER BY s.id,ct.id,c.id
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="queryCommodityTypeOptionInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityTypeOptionRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityTypeOptionViewModel">
+        SELECT
+            ct.id commodityTypeId,
+            ct.name commodityTypeName,
+            s.name supplierName,
+            s.id supplierId
+        FROM
+        commodity c
+        INNER JOIN commodity_type ct ON c.commodity_type_id = ct.id
+        <if test="commodityTypeName != '' and commodityTypeName != null">
+            AND ct.name like  CONCAT('%',#{commodityTypeName},'%')
+        </if>
+        INNER JOIN supplier s ON c.supplier_id = s.id
+        <if test="supplierId != '' and supplierId != null">
+            AND s.id in
+            <foreach collection="supplierIds" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        group by s.id,ct.id
+        ORDER BY s.id,ct.id
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="queryCommodityOptionInfoCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityOptionRequest" resultType="long">
+        SELECT
+          Count(c.id)
+        FROM
+          commodity c
+        where 1=1
+        <if test="commodityName != '' and commodityName != null">
+            AND c.name like  CONCAT('%',#{commodityName},'%')
+        </if>
+        <if test="commodityOptionInfos != null">
+            AND
+            <foreach collection="commodityOptionInfos" index="index" item="item" open="(" close=")" separator="or" >
+                (c.supplier_id = #{item.supplierId}  AND c.commodity_type_id = #{item.commodityTypeId})
+            </foreach>
+        </if>
+    </select>
+
+    <select id="queryCommodityTypeOptionInfoCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityTypeOptionRequest" resultType="long">
+        SELECT
+          Count(DISTINCT c.supplier_id,c.commodity_type_id)  co
+        FROM
+          commodity c
+        INNER JOIN commodity_type ct ON c.commodity_type_id = ct.id
+        <if test="commodityTypeName != '' and commodityTypeName != null">
+            AND ct.name like  CONCAT('%',#{commodityTypeName},'%')
+        </if>
+        <if test="supplierId != '' and supplierId != null">
+            AND c.supplier_id in
+            <foreach collection="supplierIds" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="queryStoreSupplierOptionInfo" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.commodity.SupplierOptionViewModel">
+        SELECT
+          DISTINCT (s.id) supplierId,
+          s.name supplierName
+        FROM
+          supplier s
+        INNER JOIN commodity c ON c.supplier_id = s.id
+        INNER JOIN store_commodity sc ON c.id = sc.commodity_id
+        AND sc.store_id =#{storeId}
+        ORDER BY s.id
+    </select>
+
+    <select id="queryStoreCommodityTypeOptionInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.StoreCommodityTypeInfoRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.commodity.StoreCommodityTypeOptionViewModel">
+        SELECT
+          DISTINCT (ct.id) commodityTypeId,
+          ct.name commodityTypeName
+        FROM
+          commodity_type ct
+        INNER JOIN commodity c ON c.commodity_type_id = ct.id AND c.supplier_id=#{supplierId}
+        INNER JOIN store_commodity sc ON c.id = sc.commodity_id
+        AND sc.store_id =#{storeId}
+        ORDER BY ct.id
+    </select>
+
+    <select id="queryStoreCommodityInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.StoreCommodityInfoRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.commodity.CommodityOptionViewModel">
+        SELECT
+            c.name commodityName,
+            c.id commodityId,
+            ct.name commodityTypeName,
+            s.name supplierName
+        FROM
+            commodity c
+        INNER JOIN store_commodity sc on sc.commodity_id = c.id and sc.store_id = #{storeId}
+        <if test="commodityName != '' and commodityName != null">
+            AND c.name like  CONCAT('%',#{commodityName},'%')
+        </if>
+        <if test="commodityTypeId != null">
+            AND c.commodity_type_id =#{commodityTypeId}
+        </if>
+        <if test="supplierId != null">
+            AND c.supplier_id=#{supplierId}
+        </if>
+        INNER JOIN commodity_type ct ON c.commodity_type_id = ct.id
+        INNER JOIN supplier s ON c.supplier_id = s.id
+        ORDER BY c.supplier_id,c.commodity_type_id,c.id
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="queryStoreCommodityInfoCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.commodity.StoreCommodityInfoRequest" resultType="long">
+        SELECT
+          count(c.id)
+        FROM
+        commodity c
+        INNER JOIN store_commodity sc on sc.commodity_id = c.id and sc.store_id = #{storeId}
+        <if test="commodityName != '' and commodityName != null">
+            AND c.name like  CONCAT('%',#{commodityName},'%')
+        </if>
+        <if test="commodityTypeId != null">
+            AND c.commodity_type_id =#{commodityTypeId}
+        </if>
+        <if test="supplierId != null">
+            AND c.supplier_id=#{supplierId}
+        </if>
+    </select>
+
+</mapper>

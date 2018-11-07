@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.StoreInfoExtensionMapper">
+
+    <select id="chartStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.storePortrait.StorePortraitChartStatisticRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.storePortrait.StorePortraitChartStatisticInfo">
+        <if test="storePortraitType == 1">
+            <include refid="chartStatisticByStorePortrait">
+                <property name="storePortrait" value="sie.store_front_type"/>
+            </include>
+        </if>
+        <if test="storePortraitType == 2">
+            <include refid="chartStatisticByStorePortrait">
+                <property name="storePortrait" value="sie.daily_sales"/>
+            </include>
+        </if>
+        <if test="storePortraitType == 3">
+            <include refid="chartStatisticByStorePortrait">
+                <property name="storePortrait" value="sie.decoration"/>
+            </include>
+        </if>
+        <if test="storePortraitType == 4">
+            <include refid="chartStatisticByStorePortraits"/>
+        </if>
+        <if test="storePortraitType == 5">
+            <include refid="chartStatisticByStorePortrait">
+                <property name="storePortrait" value="sie.commercial_area"/>
+            </include>
+        </if>
+        <if test="storePortraitType == 6">
+            <include refid="chartStatisticByStorePortrait">
+                <property name="storePortrait" value="sie.order_ratio"/>
+            </include>
+        </if>
+    </select>
+
+    <sql id="chartStatisticByStorePortrait">
+        SELECT
+            #{storePortraitType} storePortraitType,
+            ${storePortrait} itemValue,
+            SUM(si.is_using)AS usedStoreCount,
+            count(si.id) storeCount
+        FROM store_info si
+        INNER JOIN store_info_extension sie ON si.id=sie.id
+        AND si.deleted =0 and si.store_type > 0 AND ${storePortrait} > 0
+        <if test="provinceId != '' and provinceId != null">
+            AND si.province_id = #{provinceId}
+        </if>
+
+        <if test="cityId != ''and cityId !=null">
+            AND si.city_id = #{cityId}
+        </if>
+
+        <if test="regionId != '' and regionId !=null">
+            AND si.region_id = #{regionId}
+        </if>
+        GROUP BY ${storePortrait}
+
+    </sql>
+
+
+    <sql id="chartStatisticByStorePortraits">
+
+        SELECT
+        #{storePortraitType} storePortraitType,
+        sp.`value` itemValue,
+        SUM(si.is_using)AS usedStoreCount,
+        count(si.id) storeCount
+        FROM store_info si
+        INNER JOIN store_portrait sp on sp.store_id=si.id and sp.store_portrait_type=#{storePortraitType} AND sp.`value` > 0
+        AND si.deleted =0 and si.store_type > 0
+        <if test="provinceId != '' and provinceId != null">
+            AND si.province_id = #{provinceId}
+        </if>
+
+        <if test="cityId != ''and cityId !=null">
+            AND si.city_id = #{cityId}
+        </if>
+
+        <if test="regionId != '' and regionId !=null">
+            AND si.region_id = #{regionId}
+        </if>
+        GROUP BY sp.`value`
+    </sql>
+
+
+    <select id="storePortraitUseCountStatistic" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoUseCountStatistic" >
+        SELECT
+          COUNT(si.id) allStoreCount,
+          SUM(si.is_using) useStoreCount
+        FROM store_info si
+        INNER JOIN store_info_extension sie ON si.id=sie.id AND deleted =0 AND si.store_type > 0
+    </select>
+
+    <select id="getStoreInfoExtensionCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.storePortrait.StorePortraitListRequest" resultType="java.lang.Long">
+        SELECT count(si.id) from store_info si
+        INNER  JOIN  store_info_extension sie on si.id=sie.id
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.queryStorePrimaryCondition"/>
+        <include refid="storePortraitCondition"/>
+    </select>
+
+    <select id="getStoreInfoExtensionInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.store.storePortrait.StorePortraitListViewModel" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.storePortrait.StorePortraitListRequest" >
+        SELECT
+        si.id,
+        si.store_name as storeName,
+        si.store_address as storeAddress,
+        si.store_no as shopId,
+        si.province_id as  provinceId,
+        si.city_id as  cityId,
+        si.region_id as  regionId,
+        sie.store_front_type as storeFrontType,
+        sie.daily_sales as dailySales,
+        sie.decoration as decoration,
+        sie.commercial_area as commercialArea,
+        sie.order_ratio as orderRatio,
+        (SELECT group_concat(sp.`value` SEPARATOR ',') from store_portrait sp where sp.store_id=si.id )as surroundingsDistrict
+        from store_info si
+        INNER  JOIN  store_info_extension sie on si.id=sie.id
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.queryStorePrimaryCondition"/>
+        <include refid="storePortraitCondition"/>
+        ORDER BY si.store_no asc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <sql id="storePortraitCondition">
+        <if test="storeFrontType != null and storeFrontType !='' ">
+            and sie.store_front_type in
+            <foreach collection="allStoreFrontTypes" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="dailySales != null  and dailySales !=''">
+            and sie.daily_sales in
+            <foreach collection="allDailySales" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="decoration != null  and decoration !=''">
+            and sie.decoration in
+            <foreach collection="allDecorations" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="commercialArea != null  and commercialArea !=''">
+            and sie.commercial_area in
+            <foreach collection="allCommercialAreas" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="orderRatio != null  and orderRatio !=''">
+            and sie.order_ratio in
+            <foreach collection="allOrderRatios" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="surroundingsDistrict != null  and surroundingsDistrict !=''">
+            and exists( select 1 from store_portrait sp where sie.id=sp.store_id
+            and sp.value in
+            <foreach collection="allSurroundingsDistricts" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+            )
+        </if>
+    </sql>
+
+
+</mapper>

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.PartnerDailyStoreMonitorStatisticMapper">
+    <select id="getAdPositionStatisticsTimes"
+            resultType="com.sztouyun.advertisingsystem.model.partner.AdPositionStatisticsTimes"
+            parameterType="com.sztouyun.advertisingsystem.viewmodel.partner.DisplayTimesProportionRequest">
+        SELECT
+        advertisement_position_category advertisementPositionCategory,
+        IFNULL(SUM(valid_times), 0) validTimes,
+        IFNULL(SUM(display_times), 0) displayTimes
+        FROM partner_daily_store_monitor_statistic
+        WHERE partner_id = #{partnerId}
+        <if test="beginDate != null">
+            AND date &gt;= #{beginDate}
+        </if>
+        <if test="endDate != null">
+            AND date &lt;= #{endDate}
+        </if>
+        GROUP BY advertisement_position_category
+    </select>
+
+    <select id="getPartnerDisplayTimesStatistic"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.partner.DisplayTimesViewModel"
+            parameterType="com.sztouyun.advertisingsystem.viewmodel.partner.DisplayTimesRequest">
+        SELECT cp.name partnerName, IFNULL(temp.displayTimes, 0) displayTimes, IFNULL(temp.validTimes, 0) validTimes
+        FROM cooperation_partner cp
+        LEFT JOIN(
+            SELECT
+                partner_id,
+                SUM(pdsms.display_times) displayTimes,
+                SUM(pdsms.valid_times) validTimes
+            FROM partner_daily_store_monitor_statistic pdsms
+            <where>
+                <if test="beginDate != null">
+                  AND pdsms.date &gt;= #{beginDate}
+                </if>
+                <if test="endDate != null">
+                  AND pdsms.date &lt;= #{endDate}
+                </if>
+            </where>
+            GROUP BY pdsms.partner_id) temp
+        ON cp.id = temp.partner_id
+        ORDER BY
+        <if test="sortNumber == 1">
+            displayTimes
+        </if>
+        <if test="sortNumber == 2">
+            validTimes
+        </if>
+        DESC, cp.id ASC
+    </select>
+
+    <select id="getRequestStoreRankInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.StoreRankInfoRequest"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.RequestStoreRankInfo">
+        SELECT
+            si.city_id,
+            0 as configStoreCount,
+            COUNT(DISTINCT si.id) requestStoreCount,
+            SUM(pdsms.display_times) as displayTimes,
+            SUM(pdsms.valid_times) as validTimes,
+            sum(pdsms.get_ad_times+pdsms.get_no_ad_times+pdsms.api_error_times) as requestTimes
+            FROM
+            partner_daily_store_monitor_statistic pdsms
+        INNER JOIN
+            store_info si
+        on  pdsms.store_id=si.id and pdsms.partner_id=#{partnerId}
+        <if test="startTime != null">
+            and pdsms.date >= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND pdsms.date &lt;= #{endTime}
+        </if>
+        GROUP BY si.city_id
+
+    </select>
+
+    <select id="getAllPartnerStoreNum" resultType="com.sztouyun.advertisingsystem.viewmodel.partner.StoreRequestRankingViewModel" parameterType="com.sztouyun.advertisingsystem.viewmodel.partner.StoreRequestRankingRequest">
+        SELECT
+        cp.`name` partnerName,
+        IFNULL(temp.storeNum,0) storeNum,
+        IFNULL(temp2.requestStoreNum,0) requestStoreNum
+        FROM(
+        SELECT partner_id, COUNT(store_id) storeNum
+        FROM partner_media_config
+        GROUP BY partner_id
+        ) temp
+        LEFT JOIN cooperation_partner cp
+        ON temp.partner_id = cp.id
+        LEFT JOIN(
+        SELECT partner_id, COUNT(DISTINCT store_id) requestStoreNum
+        FROM partner_daily_store_monitor_statistic pdsms
+        <where>
+            <if test="beginDate != null">
+                AND date &gt;= #{beginDate}
+            </if>
+            <if test="endDate != null">
+                AND date &lt;= #{endDate}
+            </if>
+        </where>
+        GROUP BY partner_id
+        ) temp2
+        ON temp.partner_id = temp2.partner_id
+        ORDER BY storeNum DESC, cp.id ASC
+    </select>
+
+    <select id="requestStoreCountLineChartStatistic"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.CooperationPartnerLineChartStoreCountInfo"
+            parameterType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.CooperationPartnerPieChartRequest">
+        SELECT
+            pdsms.date,
+            count(DISTINCT pdsms.store_id) requestStoreCount,
+            (select count(pmc.store_id) from partner_media_config pmc where pmc.partner_id = #{cooperationPartnerId}) configStoreCount
+        FROM partner_daily_store_monitor_statistic pdsms
+        WHERE pdsms.partner_id = #{cooperationPartnerId}
+        <if test="startTime != null">
+            AND pdsms.date &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND pdsms.date &lt;= #{endTime}
+        </if>
+        GROUP BY pdsms.date
+    </select>
+
+    <select id="profitStatistic"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.CooperationPartnerProfitStatisticViewModel">
+        select
+            IFNULL(sum(profit_amount),0) totalProfit,
+            IFNULL(SUM( CASE WHEN pdsms.date >= #{yesterday} and pdsms.date <![CDATA[ <= ]]> #{yesterday} THEN profit_amount else 0 END),0) as yesterdayProfit,
+            IFNULL(SUM( CASE WHEN pdsms.date >= #{week} and pdsms.date <![CDATA[ <= ]]> #{yesterday} THEN profit_amount else 0 END),0) as lastWeekProfit,
+            IFNULL(SUM( CASE WHEN pdsms.date >= #{month} and pdsms.date <![CDATA[ <= ]]> #{yesterday} THEN profit_amount else 0 END),0) as monthProfit
+        from partner_daily_store_monitor_statistic pdsms
+        where pdsms.partner_id=#{partnerId}
+    </select>
+
+
+    <select id="partnerProfitTrendLineChart" resultType="com.sztouyun.advertisingsystem.viewmodel.coorperationPartner.CooperationPartnerLineChartProfitTrendInfo">
+        SELECT
+            pdsms.date,
+            IFNULL(SUM(profit_amount),0) profitAmount,
+            IFNULL(SUM(valid_times),0) validDisplayTimes,
+            IFNULL(SUM( CASE WHEN pdsms.advertisement_position_category =1 THEN profit_amount else 0 END),0) as fullScreenProfitAmount,
+            IFNULL(SUM( CASE WHEN pdsms.advertisement_position_category =2 THEN profit_amount else 0 END),0) as scanPayProfitAmount
+        FROM partner_daily_store_monitor_statistic pdsms
+        WHERE pdsms.partner_id = #{cooperationPartnerId}
+        <if test="startTime != null">
+            AND pdsms.date &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND pdsms.date &lt;= #{endTime}
+        </if>
+        GROUP BY pdsms.date
+    </select>
+
+    <update id="updatePartnerDailyProfitAmount" parameterType="com.sztouyun.advertisingsystem.viewmodel.partner.UpdateDailyProfitAmountViewModel">
+        update partner_daily_store_monitor_statistic set profit_amount = valid_times * #{price} where partner_id = #{partnerId} and date = #{date}
+    </update>
+</mapper>

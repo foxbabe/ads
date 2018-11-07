@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.AttachmentMapper">
+    <insert id="saveTaskAttachments" parameterType="com.sztouyun.advertisingsystem.viewmodel.internal.task.CompleteTaskRequest">
+        insert INTO attachment(`created_time`,`object_id`,`url`) values
+        <foreach collection="attachments" index="index" item="item"   separator=",">
+            ( now(),#{id},#{item})
+        </foreach>
+    </insert>
+</mapper>

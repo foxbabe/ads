@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.AdvertisementDailyLinkMonitorStatisticMapper">
+    <sql id="material_url_first_step_id_list">
+        SELECT amus.id FROM advertisement_material_url_step amus
+        INNER JOIN advertisement_material am ON amus.advertisement_material_id = am.id AND amus.is_first = 1 AND am.advertisement_id = #{advertisementId}
+    </sql>
+
+    <select id="getAllStoreParticipationStatistics" resultType="com.sztouyun.advertisingsystem.model.monitor.StoreParticipationStatistics" parameterType="string">
+        SELECT advertisement_position_category, link_type, COUNT(DISTINCT store_id) count
+        FROM advertisement_daily_link_monitor_statistic
+        WHERE action = 1
+        AND material_url_step_id IN (<include refid="material_url_first_step_id_list"/>)
+        GROUP BY advertisement_position_category, link_type
+    </select>
+
+    <select id="getAllClickOrScanTimes" resultType="com.sztouyun.advertisingsystem.model.monitor.ClickOrScanTimes" parameterType="string">
+        SELECT advertisement_position_category, link_type, IFNULL(SUM(trigger_times),0) totalTimes
+        FROM advertisement_daily_link_monitor_statistic
+        WHERE action = 1
+        AND material_url_step_id IN (<include refid="material_url_first_step_id_list"/>)
+        GROUP BY advertisement_position_category, link_type
+    </select>
+
+    <select id="getAllLinkTimes" resultType="com.sztouyun.advertisingsystem.model.monitor.DateLinkTimes" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.ClickOrScanTimesTrendRequest">
+        SELECT date, link_type, IFNULL(SUM(trigger_times),0) totalTimes
+        FROM advertisement_daily_link_monitor_statistic
+        WHERE link_type = 1
+        AND action = 1
+        AND date &gt;= #{beginDate}
+        AND date &lt;= #{endDate}
+        AND material_url_step_id IN (<include refid="material_url_first_step_id_list"/>)
+        GROUP BY date
+
+        UNION all
+
+        SELECT date, link_type, IFNULL(SUM(trigger_times),0) totalTimes
+        FROM advertisement_daily_link_monitor_statistic
+        WHERE link_type = 2
+        AND action = 1
+        AND date &gt;= #{beginDate}
+        AND date &lt;= #{endDate}
+        AND material_url_step_id IN (<include refid="material_url_first_step_id_list"/>)
+        GROUP BY date
+    </select>
+    <insert id="saveAdvertisementDailyLinkMonitorStatistic" parameterType="java.util.List">
+        INSERT INTO advertisement_daily_link_monitor_statistic
+        (
+        `action`,
+        `advertisement_position_category`,
+        `date`,
+        `link_type`,
+        `material_url_step_id`,
+        `step_type`,
+        `store_id`,
+        `trigger_times`,
+        `created_time`,
+        `updated_time`
+        ) VALUES
+        <foreach collection="list" index="index" item="item"   separator=",">
+            ( #{item.action},
+            #{item.advertisementPositionCategory},
+            #{item.date},
+            #{item.linkType},
+            #{item.materialUrlStepId},
+            #{item.stepType},
+            #{item.storeId},
+            #{item.triggerTimes},
+            #{item.createdTime},
+            #{item.updatedTime}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE trigger_times=trigger_times+VALUES(`trigger_times`),updated_time=VALUES(`updated_time`);
+    </insert>
+
+    <select id="getMaterialLinkMonitorInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.MaterialLinkMonitorInfo">
+        select
+        adlms.material_url_step_id,
+        sum(adlms.trigger_times) triggerTimes,
+        adlms.step_type,
+        adlms.action
+        from advertisement_daily_link_monitor_statistic adlms
+        inner join advertisement_material_url_step amus
+        on adlms.material_url_step_id = amus.id
+        and amus.advertisement_material_id=#{advertisementMaterialId}
+        and amus.link_type = #{linkType}
+        and adlms.action in (1,2)
+        group by adlms.material_url_step_id,adlms.action
+        order by adlms.step_type
+    </select>
+</mapper>

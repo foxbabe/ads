@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper  namespace="com.sztouyun.advertisingsystem.mapper.CustomerStorePlanMapper">
+    <select id="getCustomerCheckedStoreAreaIds" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStoreInfoAreaSelectedRequest" resultType="string">
+        SELECT  si.region_id regionId FROM store_info si INNER JOIN customer_store_plan_detail cspd  ON cspd.`store_id` = si.id AND cspd.`customer_store_plan_id` = #{customerStorePlanId} and si.deleted=0 group by si.region_id
+    </select>
+
+    <select id="getCityCount" parameterType="string" resultType="long">
+      SELECT COUNT(*) FROM (
+        SELECT city_id FROM
+        customer_store_plan_detail cspd
+        INNER JOIN store_info si ON si.id = cspd.store_id AND cspd.customer_store_plan_id = #{customerStorePlanId} GROUP BY si.city_id
+        ) tmp
+    </select>
+
+    <delete id="deleteCustomerStorePlanDetail" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.DeleteCustomerStorePlanInfo">
+        delete from customer_store_plan_detail
+        where customer_store_plan_id = #{customerStorePlanId} and store_id = #{storeId}
+    </delete>
+
+    <delete id="cancelTempCustomerStoreInfo" parameterType="string">
+        delete from customer_store_plan_detail where customer_store_plan_id = #{tempCustomerStorePlanId}
+    </delete>
+
+    <delete id="emptyCustomerStorePlan" parameterType="string">
+        delete from customer_store_plan_detail where customer_store_plan_id = #{customerStorePlanId}
+    </delete>
+    <insert id="batchChooseCustomerStoreInfo"  parameterType="com.sztouyun.advertisingsystem.viewmodel.store.CustomerStoreInfoQueryRequest">
+        INSERT INTO customer_store_plan_detail ( customer_store_plan_id, store_id)
+        SELECT #{customerStorePlanId} as customer_store_plan_id, store_id FROM (
+        (SELECT  si.id AS store_id
+        FROM store_info si
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type
+        AND si.deleted = 0
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+        <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.areaIdConditionSQL"></include>
+        LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND cspd.customer_store_plan_id = #{customerStorePlanId}
+        LEFT JOIN store_daily_statistic sds on sds.store_id = si.id and sds.date = #{previousDate}
+        WHERE (ap.ad_count > si.used_count) AND cspd.id is NULL
+        order by sds.order_count desc
+        <if test="insertCount > 0">
+            LIMIT #{insertCount}
+        </if>
+        )
+        <if test="isWithCoordinate != null and isWithCoordinate == true">
+            UNION
+            (SELECT  si.id AS store_id
+            FROM store_info si
+            INNER JOIN ad_position ap ON si.store_type = ap.store_type
+            AND si.deleted = 0
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeInfoConditionSQL"></include>
+            <include refid="com.sztouyun.advertisingsystem.mapper.CommonStoreMapper.storeDistanceConditionSQL"></include>
+            LEFT JOIN customer_store_plan_detail cspd on si.id =cspd.store_id AND cspd.customer_store_plan_id = #{customerStorePlanId}
+            LEFT JOIN store_daily_statistic sds on sds.store_id = si.id and sds.date = #{previousDate}
+            WHERE (ap.ad_count > si.used_count) AND cspd.id is NULL
+            order by sds.order_count desc
+            <if test="insertCount > 0">
+                LIMIT #{insertCount}
+            </if>
+            )
+        </if>
+        <if test="insertCount > 0">
+            LIMIT #{insertCount}
+        </if>
+        ) tmp
+
+    </insert>
+
+    <insert id="copyTempCustomerStorePlanDetail" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.CopyCustomerStorePlanInfo">
+        insert into customer_store_plan_detail(customer_store_plan_id, store_id)
+          select #{tempCustomerStorePlanId}, store_id from customer_store_plan_detail where customer_store_plan_id = #{oldCustomerStorePlanId}
+    </insert>
+
+    <delete id="deleteByCustomerStorePlanId" parameterType="string">
+        delete from customer_store_plan_detail where customer_store_plan_id = #{customerStorePlanId}
+    </delete>
+
+    <update id="updateCustomerStorePlanId" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.SaveCustomerStorePlanInfo">
+        update customer_store_plan_detail set customer_store_plan_id = #{oldCustomerStorePlanId} where customer_store_plan_id = #{tempCustomerStorePlanId}
+    </update>
+
+    <select id="getStoreInfoByCustomerStorePlanId" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.ExportStoreInfoQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoStatisticViewModel">
+        SELECT
+            si.store_no AS shopId,
+            si.store_name AS storeName,
+            si.province_id AS provinceId,
+            si.city_id AS cityId,
+            si.region_id AS regionId,
+            si.store_address AS storeAddress,
+            si.device_id AS deviceId,
+            si.available AS available
+        FROM
+            customer_store_plan_detail cspd
+        INNER JOIN store_info si ON cspd.store_id = si.id and si.deleted=0
+        AND cspd.customer_store_plan_id = #{id}
+        ORDER BY
+        si.id
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+    <select id="getStoreInfoCountByCustomerStorePlanId" parameterType="java.lang.String" resultType="java.lang.Long">
+        SELECT
+            COUNT(1)
+        FROM
+            customer_store_plan_detail cspd
+        INNER JOIN store_info si ON cspd.store_id = si.id and si.deleted=0
+        AND cspd.customer_store_plan_id = #{id}
+    </select>
+
+    <select id="loadCustomerStore" parameterType="com.sztouyun.advertisingsystem.utils.excel.LoadInfo" statementType="STATEMENT">
+        load DATA LOCAL INFILE ${filePath} IGNORE INTO TABLE
+        `customer_store_import_temp`
+        character set utf8
+        FIELDS TERMINATED BY ','
+        (`store_no`,`store_name`,`city_name`,`region_name`,`store_address`,`device_id`)
+         SET oid = ${oid},bid=${bid};
+
+        update  customer_store_import_temp csit
+        INNER JOIN (
+                SELECT
+                    min(temp1.id) id,temp1.store_no
+                FROM
+                    customer_store_import_temp temp1
+                WHERE
+                    temp1.oid = ${oid}
+                GROUP BY
+                    temp1.store_no
+                HAVING
+                    count(temp1.store_no) > 1
+        ) temp
+        on csit.oid = ${oid}
+          and csit.store_no =temp.store_no
+          and csit.id >temp.id
+        set `duplicate` =1
+    </select>
+
+    <insert id="batchInsertCustomerStoreDetail"  parameterType="java.lang.String">
+        INSERT INTO customer_store_plan_detail ( customer_store_plan_id, store_id)
+        SELECT #{customerStorePlanId} as customer_store_plan_id,si.id as  store_id   from customer_store_import_temp csit inner join
+        store_info si on csit.store_no=si.store_no and csit.oid=#{customerStorePlanId} and si.deleted=0
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type and ap.ad_count > si.used_count
+        group by csit.oid,csit.store_no
+    </insert>
+
+    <delete id="cleanTempData" parameterType="string">
+        DELETE  from customer_store_import_temp where oid=#{oid};
+    </delete>
+
+    <select id="getAvailableStoreCount" parameterType="string" resultType="java.lang.Long">
+        select count(1) from customer_store_import_temp  csit
+        INNER  JOIN store_info si on csit.store_no =si.store_no and oid=#{oid} and si.deleted=0  and si.available is true
+        INNER JOIN ad_position ap ON si.store_type = ap.store_type and ap.ad_count > si.used_count
+    </select>
+
+    <select id="getMatchedStoreCount" parameterType="string" resultType="java.lang.Long">
+        select count(1) from customer_store_import_temp  csit INNER  JOIN
+        store_info si on csit.store_no =si.store_no and oid=#{oid}
+    </select>
+
+    <delete id="deleteInValidCustomerStorePlanDetail" parameterType="string">
+        delete cspd from customer_store_plan_detail cspd inner join store_info si on si.id = cspd.store_id and si.deleted is true and cspd.customer_store_plan_id = #{customerStorePlanId}
+    </delete>
+
+    <select id="getInvalidCustomerStoreImportCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.InvalidCustomerStorePlanDetailRequest" resultType="java.lang.Long">
+         SELECT  COUNT(1)  from customer_store_import_temp csit
+        LEFT JOIN store_info si on csit.store_no=si.store_no and si.deleted=0
+        LEFT JOIN ad_position ap ON si.store_type = ap.store_type and si.store_type>0
+        where csit.oid=#{tempCustomerStorePlanId}
+              and (  csit.`duplicate`=1 or
+                      si.id is null
+                      or (  si.used_count >=ap.ad_count   )
+                      or ap.id is null
+                    )
+</select>
+
+    <select id="getInvalidCustomerStoreImportInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.customerStore.InvalidCustomerStorePlanDetailRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.customerStore.InvalidCustomerStorePlanDetail">
+        SELECT
+          csit.store_no as shopId,
+          csit.store_name as storeName,
+          csit.city_name as cityName,
+          csit.region_name as regionName,
+          csit.store_address as storeAddress,
+          csit.device_id as deviceId,
+          CASE
+          WHEN csit.`duplicate`=1 THEN 3
+          WHEN si.id is null THEN 1
+          WHEN si.used_count >=ap.ad_count OR ap.id is null THEN 2
+           END
+          as customerStoreInvalidType
+        from customer_store_import_temp csit
+        LEFT JOIN store_info si on csit.store_no=si.store_no and si.deleted=0
+        LEFT JOIN ad_position ap ON si.store_type = ap.store_type and si.store_type>0
+        where csit.oid=#{tempCustomerStorePlanId}
+              and (  csit.`duplicate`=1 or
+                      si.id is null
+                      or (  si.used_count >=ap.ad_count   )
+                      or ap.id is null
+                    )
+         ORDER by csit.store_no  LIMIT #{start}, #{pageSize}
+    </select>
+
+</mapper>

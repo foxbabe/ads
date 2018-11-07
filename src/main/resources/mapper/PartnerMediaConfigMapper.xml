@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.PartnerMediaConfigMapper">
+
+    <select id="existsMediaInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.partner.store.StoreInfoRequest" resultType="java.lang.Boolean">
+      SELECT 1 FROM partner_media_config WHERE partner_id = #{partnerId} AND store_id = #{storeId}
+        LIMIT 1
+    </select>
+
+    <select id="findStoreCountByCity" parameterType="string" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.RequestStoreRankBaseInfo">
+        SELECT  si.city_id ,count(si.id) as configStoreCount  from partner_media_config pms
+        INNER JOIN  store_info si on pms.store_id=si.id
+        and pms.partner_id = #{partnerId} group by si.city_id;
+    </select>
+
+</mapper>

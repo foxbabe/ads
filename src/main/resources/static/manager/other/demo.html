@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <script src="http://g.tbcdn.cn/mtb/lib-flexible/0.3.4/??flexible_css.js,flexible.js"></script>
+</head>
+<body>
+hello 这是广告<p id="ad"></p>
+</body>
+<script src="http://ads-test.storify.cc/tyad20180712/tyad.js"></script>
+<script>
+    var ad=document.getElementById("ad")
+    ad.innerHTML=$tyad.getUrlParam($tyad.getUrlParam().callUrl).materialMonitorId
+</script>
+</html>

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.AdvertisementStoreMonitorMapper">
+    <insert id="saveAdvertisementDailyDeliveryMonitorInfo"  parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementDailyDeliveryMonitor">
+        INSERT INTO `advertisement_daily_delivery_monitor_statistic`
+        (`created_time`,`updated_time`,`advertisement_id`,`date`,`display_times`,`store_id`,`advertisement_position_category`)
+        VALUES
+        <foreach collection="dailyDeliveryMonitorStatistics" index="index" item="item" open="" separator="," close="">
+            (
+            #{endTime},
+            #{endTime},
+            #{item.advertisementId},
+            #{item.date},
+            #{item.displayTimes},
+            #{item.storeId},
+            #{item.advertisementPositionCategory}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE display_times=display_times+VALUES(`display_times`),updated_time=VALUES(`date`);
+    </insert>
+
+    <select id="getMonitorStoreItems" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementStoreMonitorItemRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementStoreMonitorItem">
+        select si.id, si.store_no as shopId, si.store_name as storeName, si.province_id AS provinceId, si.city_id AS cityId, si.region_id AS regionId,
+        si.store_address AS storeAddress, si.device_id AS deviceId, si.available, si.is_qualified,
+        ifnull((select addms.updated_time from advertisement_daily_delivery_monitor_statistic addms where store_id = si.id and addms.advertisement_id = a.id order by addms.updated_time desc limit 1),
+        (select ams.created_time from advertisement_monitor_statistic ams where id = a.id)
+        ) as updatedTime,
+        ifnull((select sum(addms.display_times) from advertisement_daily_delivery_monitor_statistic addms where store_id = si.id and addms.advertisement_id = a.id), 0) as displayTimes,
+        <if test="isActive == null">
+            exists(select 1 from advertisement_daily_delivery_monitor_statistic where advertisement_id = a.id and store_id = si.id limit 1) as isActive,
+        </if>
+        <if test="isActive != null and isActive == true">
+            TRUE as isActive,
+        </if>
+        <if test="isActive != null and isActive == false">
+            FALSE as isActive,
+        </if>
+        abs(si.deleted-1) canView
+        from advertisement a inner join contract_store cs on cs.contract_id = a.contract_id inner join store_info si on si.id = cs.store_id and a.id = #{advertisementId}
+        <include refid="monitorStoreCondition"></include>
+        order by si.store_no asc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+
+    <select id="getMonitorStoreItemCount" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.AdvertisementStoreMonitorItemRequest" resultType="long">
+        SELECT COUNT(*) FROM advertisement a inner join contract_store cs on cs.contract_id = a.contract_id inner join store_info si on si.id = cs.store_id and a.id = #{advertisementId}
+        <include refid="monitorStoreCondition"></include>
+    </select>
+
+    <sql id="monitorStoreCondition">
+        <if test="provinceId != '' and provinceId != 0">
+            AND si.province_id = #{provinceId}
+        </if>
+        <if test="cityId != '' and cityId != 0">
+            AND si.city_id = #{cityId}
+        </if>
+        <if test="regionId != '' and regionId != 0">
+            AND si.region_id = #{regionId}
+        </if>
+        <if test="storeName != '' and storeName != null">
+            AND si.store_name like CONCAT('%', #{storeName}, '%')
+        </if>
+        <if test="deviceId != '' and deviceId != null">
+            AND si.device_id like CONCAT('%', #{deviceId}, '%')
+        </if>
+        <if test="shopId != '' and shopId != null">
+            AND si.store_no like  CONCAT('%',#{shopId},'%')
+        </if>
+        <if test="available != null">
+            AND si.available= #{available}
+        </if>
+        <if test="storeSource != '' and storeSource != null">
+            AND si.store_source = #{storeSource}
+        </if>
+        <if test="isActive != null and isActive == true">
+            and exists(select 1 from advertisement_daily_delivery_monitor_statistic where advertisement_id = a.id and store_id = si.id limit 1)
+        </if>
+        <if test="isActive != null and isActive == false">
+            and not exists(select 1 from advertisement_daily_delivery_monitor_statistic where advertisement_id = a.id and store_id = si.id limit 1)
+        </if>
+        <if test="isQualified != null">
+            AND si.is_qualified = #{isQualified}
+        </if>
+    </sql>
+
+    <select id="getAdvertisementInfo" resultType="com.sztouyun.advertisingsystem.viewmodel.advertisement.AdvertisementInfoModel">
+        SELECT am.id AS advertisementMaterialId, a.id AS advertisementId, a.customer_id AS customerId, a.contract_id AS
+        contractId,capc.terminal_type AS terminalType,capc.advertisement_position_type As advertisementPositionType,
+         a.effective_start_time as effectiveStartTime
+        FROM advertisement_material am INNER JOIN advertisement a
+        ON a.id = am.advertisement_id AND am.id = #{advertisementMaterialId}
+        INNER JOIN contract_advertisement_position_config capc ON capc.id = am.position_id
+    </select>
+
+    <update id="updateAdvertisementMonitorIfo"  parameterType="java.util.List">
+        <foreach collection="list" index="index" item="item"   open="" separator=";" close="">
+            UPDATE advertisement_monitor_statistic SET updated_time = NOW(), display_times = display_times + #{item.displayTimes}
+            WHERE id = #{item.id}
+        </foreach>
+    </update>
+
+    <update id="reCalcAdvertisementDisplayTimes" parameterType="java.util.List">
+        update  advertisement_monitor_statistic ams INNER JOIN
+        (SELECT advertisement_id,IFNULL(SUM(display_times),0) display_times from advertisement_daily_delivery_monitor_statistic
+         WHERE advertisement_id in
+        <foreach collection="list" index="index" item="item"   open="(" separator="," close=")">
+            #{item}
+        </foreach>
+         GROUP BY advertisement_id) temp
+        on ams.id=temp.advertisement_id set ams.display_times=temp.display_times
+    </update>
+
+    <insert id="updateAdvertisingDailyStoreMonitorStatistic" parameterType="java.util.Date">
+        INSERT  into advertising_daily_store_monitor_statistic(`advertisement_id`,`date`,`active_store_count`)
+        SELECT advertisement_id,#{date},count(DISTINCT addmc.store_id) active_store_count FROM `advertisement_daily_delivery_monitor_statistic` addmc
+        INNER JOIN advertisement_monitor_statistic ams ON addmc.advertisement_id = ams.id AND addmc.date <![CDATA[ <= ]]> #{date}
+        GROUP BY addmc.advertisement_id;
+    </insert>
+
+    <select id="getAdvertisementPositionDailyDisplayTimesStatistic" resultType="com.sztouyun.advertisingsystem.model.monitor.AdvertisementPositionDailyDisplayTimesStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.monitor.DisplayTimesBrokenChartRequest">
+        SELECT
+            date,
+            count(DISTINCT store_id) storeNum,
+            SUM((CASE WHEN advertisement_position_category = 1 THEN display_times ELSE 0 END)) advertisement_position_category_1_display_times,
+            SUM((CASE WHEN advertisement_position_category = 2 THEN display_times ELSE 0 END)) advertisement_position_category_2_display_times,
+            SUM((CASE WHEN advertisement_position_category = 3 THEN display_times ELSE 0 END)) advertisement_position_category_3_display_times,
+            SUM((CASE WHEN advertisement_position_category = 4 THEN display_times ELSE 0 END)) advertisement_position_category_4_display_times,
+            SUM((CASE WHEN advertisement_position_category = 5 THEN display_times ELSE 0 END)) advertisement_position_category_5_display_times,
+            SUM((CASE WHEN advertisement_position_category = 6 THEN display_times ELSE 0 END)) advertisement_position_category_6_display_times,
+            SUM((CASE WHEN advertisement_position_category = 7 THEN display_times ELSE 0 END)) advertisement_position_category_7_display_times,
+            SUM((CASE WHEN advertisement_position_category = 8 THEN display_times ELSE 0 END)) advertisement_position_category_8_display_times
+        FROM advertisement_daily_delivery_monitor_statistic
+        WHERE advertisement_id = #{advertisementId}
+        AND date &gt;= #{startDate}
+        AND date &lt;= #{endDate}
+        GROUP BY date
+    </select>
+</mapper>

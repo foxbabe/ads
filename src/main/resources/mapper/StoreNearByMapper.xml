@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.StoreNearByMapper">
+    <select id="getEnvironmentTypeStoreStatistics"
+            resultType="com.sztouyun.advertisingsystem.viewmodel.store.storePortrait.EnvironmentTypeStoreStatistics">
+        SELECT snb.main_environment_type, COUNT(si.id) storeNum FROM
+        store_info si INNER JOIN
+        store_near_by snb on si.id=snb.id  and si.deleted=0
+        GROUP BY main_environment_type
+
+    </select>
+
+    <insert id="syncStoreNearBy">
+        INSERT INTO `store_near_by` (
+        `id`,
+        `commercial_district_count`,
+        `residential_district_count`,
+        `school_district_count`,
+        `main_environment_type`,
+        `updated_time`
+        )
+        VALUES
+        <foreach collection="list" index="index" item="item" separator=",">
+            (
+            #{item.id}
+            ,#{item.commercialDistrictCount}
+            ,#{item.residentialDistrictCount}
+            ,#{item.schoolDistrictCount},
+            #{item.mainEnvironmentType},
+            #{item.updatedTime}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+        commercial_district_count=VALUES(`commercial_district_count`),
+        residential_district_count=VALUES(`residential_district_count`),
+        school_district_count=VALUES(`school_district_count`),
+        main_environment_type=VALUES(`main_environment_type`),
+        updated_time=VALUES(`updated_time`);
+    </insert>
+
+    <select id="findNeedSyncStoreInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.DayPageRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreNearByUpdateInfo">
+        SELECT si.id,si.longitude,si.latitude,si.gps_position_update_time updatedTime from store_info si left join store_near_by snb on si.id =snb.id
+        where si.store_source=2
+        and si.deleted=0
+        and (
+              snb.id is null
+              or ( si.gps_position_update_time <![CDATA[ < ]]> #{date} and snb.updated_time = #{date})
+              or si.gps_position_update_time > snb.updated_time
+        )
+        order by si.id desc
+        LIMIT #{start}, #{pageSize}
+    </select>
+</mapper>

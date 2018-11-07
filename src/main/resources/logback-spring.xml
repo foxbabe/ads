@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="originHost" source="log.originHost"/>
+    <springProperty scope="context" name="logStdout" source="log.stdout"/>
+    <springProperty scope="context" name="logLevel" source="log.level" defaultValue="info"/>
+    <springProperty scope="context" name="logGelfOut" source="log.gelf.out" defaultValue="true"/>
+    <springProperty scope="context" name="logGraylogPort" source="log.graylog.port" defaultValue="12201"/>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+
+    <if condition='property("logStdout").equals("true")'>
+        <then>
+            <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
+        </then>
+    </if>
+
+    <appender name="GELF" class="de.siegmar.logbackgelf.GelfUdpAppender">
+        <graylogHost>log-internal.storify.cc</graylogHost>
+        <graylogPort>${logGraylogPort}</graylogPort>
+        <maxChunkSize>508</maxChunkSize>
+        <useCompression>true</useCompression>
+        <layout class="de.siegmar.logbackgelf.GelfLayout">
+            <originHost>${originHost}</originHost>
+            <includeRawMessage>false</includeRawMessage>
+            <includeMarker>true</includeMarker>
+            <includeMdcData>true</includeMdcData>
+            <includeCallerData>false</includeCallerData>
+            <includeRootCauseData>false</includeRootCauseData>
+            <includeLevelName>false</includeLevelName>
+            <shortPatternLayout class="ch.qos.logback.classic.PatternLayout">
+                <pattern>%m%nopex</pattern>
+            </shortPatternLayout>
+            <fullPatternLayout class="ch.qos.logback.classic.PatternLayout">
+                <pattern>%m</pattern>
+            </fullPatternLayout>
+            <staticField>app_name:ads</staticField>
+            <staticField>os_arch:${os.arch}</staticField>
+            <staticField>os_name:${os.name}</staticField>
+            <staticField>os_version:${os.version}</staticField>
+        </layout>
+    </appender>
+
+    <logger name="org.springframework.web.filter.CommonsRequestLoggingFilter" level="INFO" />
+    <!-- show parameters for hibernate sql 专为 Hibernate 定制 -->
+    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="DEBUG"/>
+    <logger name="org.hibernate.type.descriptor.sql.BasicExtractor" level="DEBUG"/>
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+    <logger name="org.hibernate.engine.QueryParameters" level="DEBUG"/>
+    <logger name="org.hibernate.engine.query.HQLQueryPlan" level="DEBUG"/>
+    <logger name="com.microsoft.azure.servicebus.primitives.CoreMessageReceiver" level="OFF"/>
+
+
+    <!--打印mybatis的sql日志-->
+    <logger name="com.sztouyun.advertisingsystem.mapper" level="DEBUG"/>
+    <logger name="org.springframework.data.mongodb.core.MongoTemplate" level="DEBUG"/>
+    <root level="${logLevel}">
+        <if condition='property("logGelfOut").equals("true")'>
+            <then>
+                <appender-ref ref="GELF" />
+            </then>
+        </if>
+        <if condition='property("logStdout").equals("true")'>
+            <then>
+                <appender-ref ref="CONSOLE" />
+            </then>
+        </if>
+    </root>
+</configuration>

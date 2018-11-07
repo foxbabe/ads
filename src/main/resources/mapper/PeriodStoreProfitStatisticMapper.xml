@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sztouyun.advertisingsystem.mapper.PeriodStoreProfitStatisticMapper">
+
+    <insert id="addPeriodStoreProfitShareStatistic" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.PeriodStoreProfitShareCalculateViewModel">
+        INSERT INTO `period_store_profit_statistic`(`id`,`settled`,`settled_month`,`settled_store_profit_id`,`share_amount`,`store_id`)
+            SELECT
+                REPLACE(UUID(), '-', '') AS id,
+                FALSE AS settled,
+                #{startDate} AS settled_month,
+                '' AS settled_store_profit_id,
+                CASE WHEN TRUNCATE((tmp.unQualifiedDays + (TIMESTAMPDIFF(DAY, tmp.startCalcDay, #{endDate}) - tmp.dayProfitCount ))/TIMESTAMPDIFF(DAY, tmp.startCalcDay, #{endDate}), 2) > #{errorTolerantRate} THEN 0 ELSE tmp.amout END AS share_amount,
+                tmp.store_id
+                FROM
+                (
+                SELECT COUNT(store_id) dayProfitCount, store_id, sum(cast(share_amount as  decimal(18,2))) AS amout, SUM(sps.is_qualified IS FALSE) AS `unQualifiedDays`,
+                CASE WHEN date(si.created_at)  &lt;=  #{startDate} THEN #{startDate} ELSE date(created_at) END AS startCalcDay
+                FROM store_profit_statistic  sps
+                INNER JOIN store_info si ON sps.store_id = si.id
+                and si.id in
+                <foreach collection="storeIds" item="item" index="index" separator="," open="(" close=")">
+                    #{item}
+                </foreach>
+                AND profit_date >= #{startDate} AND profit_date &lt; #{endDate} AND settled IS FALSE
+                GROUP BY store_id
+            ) tmp
+    </insert>
+    
+    <delete id="deletePeriodStoreProfitShareStatistic">
+        DELETE FROM period_store_profit_statistic WHERE id in
+            <foreach collection="list" index="index" item="item" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+    </delete>
+
+    <select id="getAdvertisementStoreProfitPeriodStatistic" resultType="com.sztouyun.advertisingsystem.viewmodel.store.PeriodStoreProfitStatisticInfo" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.PeriodStoreProfitStatisticViewModel">
+        SELECT
+        store_id as storeId,
+        min(settled_month) as startDate,
+        max(settled_month)  as endDate,
+        ifnull(sum(share_amount *100)/100,0)  as shareAmount,
+        ifnull(sum(settled_amount *100)/100,0) as settledAmount
+        FROM
+        advertisement_store_profit_period_statistic
+        WHERE store_id in
+        <foreach collection="storeIds" index="index" item="item" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        AND  advertisement_id = #{advertisementId}
+        GROUP BY  store_id
+    </select>
+
+    <select id="getStoreMonthProfitList" parameterType="com.sztouyun.advertisingsystem.viewmodel.adProfitShare.AdvertisementPeriodStoreProfitStatisticRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoMonthList">
+        SELECT  si.id id,si.store_name storeName ,si.store_address storeAddress,si.province_id provinceId,si.city_id cityId,si.region_id regionId,si.device_id deviceId, si.available
+        ,si.store_no AS shopId,aspps.settled_month shareAmountMonth,aspps.share_amount shareAmount,CASE WHEN aspps.settled_amount>0 THEN 1 ELSE 0 END settled,abs(si.deleted - 1) as canView
+        FROM advertisement_store_profit_period_statistic aspps
+        INNER JOIN  store_info si on aspps.store_id = si.id
+        WHERE aspps.store_id = #{storeId} AND  aspps.advertisement_id =#{advertisementId}
+    </select>
+
+    <select id="getAdvertisementStoreMonthProfitList" parameterType="com.sztouyun.advertisingsystem.viewmodel.store.ContractStoreQueryRequest" resultType="com.sztouyun.advertisingsystem.viewmodel.store.StoreInfoMonthList">
+        SELECT  si.id id,si.store_name storeName ,si.store_address storeAddress,si.province_id provinceId,si.city_id cityId,si.region_id regionId,si.device_id deviceId, si.available,
+        si.is_qualified, si.store_no AS shopId,psps.settled_month shareAmountMonth,IFNULL(psps.share_amount,0) shareAmount,CASE WHEN psps.settled_amount>0 THEN 1 ELSE 0 END settled
+        FROM  contract_store cst
+        INNER JOIN store_info si  ON  cst.contract_id= #{contractId} AND si.id=cst.store_id
+        <include refid="com.sztouyun.advertisingsystem.mapper.StoreInfoMapper.query_store_list_condition"/>
+        LEFT JOIN  advertisement_store_profit_period_statistic psps ON psps.store_id=si.id and psps.advertisement_id =#{advertisementId}
+        ORDER BY psps.advertisement_id, psps.store_id,psps.settled_month,si.store_no asc
+        LIMIT #{start}, #{pageSize}
+    </select>
+
+</mapper>
